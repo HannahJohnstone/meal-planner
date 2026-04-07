@@ -241,6 +241,29 @@
     .sync-dot.syncing { background: var(--amber); animation: pulse 1s infinite; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
+    /* ── Heart / favourite ── */
+    .heart-btn { background: transparent; border: none; cursor: pointer; font-size: 18px; color: var(--text-3); transition: all 0.15s; line-height: 1; padding: 2px; }
+    .heart-btn:hover { color: var(--coral); transform: scale(1.15); }
+    .heart-btn.active { color: var(--coral); }
+
+    /* ── Day meal with swap ── */
+    .day-meal-wrap { position: relative; margin-bottom: 4px; }
+    .day-meal-wrap:hover .swap-btn { opacity: 1; }
+    .swap-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: var(--surface); border: 0.5px solid var(--border-md); border-radius: 4px; font-size: 10px; color: var(--text-2); cursor: pointer; padding: 1px 5px; opacity: 0; transition: opacity 0.15s; white-space: nowrap; }
+    .swap-btn:hover { background: var(--accent-light); color: var(--accent-dark); }
+    .swap-btn.loading { opacity: 1; color: var(--text-3); cursor: default; }
+
+    /* ── Busy day badge ── */
+    .busy-badge { display: inline-block; font-size: 10px; font-weight: 500; background: var(--amber-light); color: var(--amber); border-radius: 4px; padding: 1px 5px; margin-bottom: 4px; }
+
+    /* ── Fav card ── */
+    .fav-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 0.5px solid var(--border); }
+    .fav-card:last-child { border-bottom: none; }
+    .fav-info { flex: 1; min-width: 0; }
+    .fav-name { font-size: 14px; font-weight: 500; color: var(--text); }
+    .fav-meta { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+    .fav-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
     /* ── Profile ── */
     .profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .profile-field { display: flex; flex-direction: column; gap: 5px; }
@@ -291,6 +314,9 @@
       </button>
       <button class="nav-item" onclick="showTab('tracker',this)">
         <span class="nav-icon">◎</span> This week
+      </button>
+      <button class="nav-item" onclick="showTab('favourites',this)">
+        <span class="nav-icon">♡</span> Favourites
       </button>
       <button class="nav-item" onclick="showTab('profile',this)">
         <span class="nav-icon">◇</span> My profile
@@ -360,7 +386,23 @@
     <!-- Week plan -->
     <div id="week" class="section">
       <h2 class="page-title">Weekly plan</h2>
-      <p class="page-sub">Your meals for the week. Click any meal for the recipe.</p>
+      <p class="page-sub">Your meals for the week. Swap any meal, or click it for the recipe.</p>
+
+      <div class="card" id="smart-planner-card" style="display:none;">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+          <div>
+            <span class="label" style="margin-bottom:4px;">From your smart planner</span>
+            <div id="smart-planner-summary" style="font-size:13px;color:var(--text-2);line-height:1.5;"></div>
+          </div>
+          <button class="btn" style="flex-shrink:0;font-size:12px;padding:6px 12px;" onclick="refreshSmartPlanner()">Refresh</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <span class="label">Anything you want this week?</span>
+        <textarea id="week-wants" placeholder="e.g. 'I really want pasta on Wednesday', 'nothing with fish this week', 'I have leftover rice to use up'…" style="min-height:56px;"></textarea>
+      </div>
+
       <div class="week-grid" id="week-grid"></div>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <button class="btn btn-primary" id="gen-week-btn" onclick="generateWeek()">Auto-generate full week</button>
@@ -423,6 +465,15 @@
       <div id="tip-output" style="display:none;margin-top:1rem;">
         <span class="label">Your tip</span>
         <div class="ai-box" id="tip-content"></div>
+      </div>
+    </div>
+
+    <!-- Favourites -->
+    <div id="favourites" class="section">
+      <h2 class="page-title">Favourites</h2>
+      <p class="page-sub">Meals you've loved. Heart any meal card to save it here — the AI will try to include them in your weekly plan.</p>
+      <div id="favs-content">
+        <p style="font-size:14px;color:var(--text-2);">No favourites yet — heart a meal from the AI suggestions to save it.</p>
       </div>
     </div>
 
@@ -512,6 +563,7 @@
   const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   let weekPlan = {};
   let shoppingItems = [];
+  let favourites = [];
   let syncTimer = null;
   let profile = { weight: 146, height: 168, age: 31, goalWeight: null, activity: 1.2, deficit: 500 };
   DAYS.forEach(d => weekPlan[d] = []);
@@ -553,12 +605,14 @@
     loadProfile();
     populateProfileFields();
     updateSidebarTarget();
+    loadSmartPlannerData();
     if (ak && jk) {
       document.getElementById('setup-banner').style.display = 'none';
       loadFromJSONBin();
     } else {
       loadLocalState();
       renderWeekGrid();
+      renderFavourites();
       renderTracker();
     }
   });
@@ -575,6 +629,7 @@
   function saveLocalState() {
     localStorage.setItem('hmp_plan', JSON.stringify(weekPlan));
     localStorage.setItem('hmp_shopping', JSON.stringify(shoppingItems));
+    localStorage.setItem('hmp_favs', JSON.stringify(favourites));
   }
   function loadLocalState() {
     try {
@@ -582,6 +637,8 @@
       if (p) weekPlan = JSON.parse(p);
       const s = localStorage.getItem('hmp_shopping');
       if (s) shoppingItems = JSON.parse(s);
+      const f = localStorage.getItem('hmp_favs');
+      if (f) favourites = JSON.parse(f);
     } catch(e) {}
   }
 
@@ -621,6 +678,7 @@
       const record = data.record;
       if (record.weekPlan) weekPlan = record.weekPlan;
       if (record.shoppingItems) shoppingItems = record.shoppingItems;
+      if (record.favourites) favourites = record.favourites;
       DAYS.forEach(d => { if (!weekPlan[d]) weekPlan[d] = []; });
       setSyncStatus('ok', 'synced');
     } catch(e) {
@@ -629,6 +687,7 @@
     }
     renderWeekGrid();
     renderShoppingList();
+    renderFavourites();
     renderTracker();
   }
 
@@ -641,7 +700,7 @@
       const res = await fetch(`${JB_BASE}/b/${binId}`, {
         method: 'PUT',
         headers: await jbHeaders(),
-        body: JSON.stringify({ weekPlan, shoppingItems })
+        body: JSON.stringify({ weekPlan, shoppingItems, favourites })
       });
       if (!res.ok) throw new Error(res.status);
       setSyncStatus('ok', 'synced just now');
@@ -721,8 +780,9 @@
     document.getElementById(id).classList.add('visible');
     if (btn) btn.classList.add('active');
     if (id === 'tracker') renderTracker();
-    if (id === 'week') renderWeekGrid();
+    if (id === 'week') { renderWeekGrid(); loadSmartPlannerData(); }
     if (id === 'shopping') renderShoppingList();
+    if (id === 'favourites') renderFavourites();
   }
 
   function toggleChip(el) { el.classList.toggle('on'); }
@@ -778,27 +838,127 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
     }
   }
 
+  // ── Smart planner integration ──
+  // Reads the shared localStorage key written by the smart planner app
+  function loadSmartPlannerData() {
+    try {
+      // Try both possible key names from the smart planner
+      const raw = localStorage.getItem('smartplanner_week') || localStorage.getItem('planner_week_summary');
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      displaySmartPlannerSummary(data);
+    } catch(e) {}
+  }
+
+  function refreshSmartPlanner() {
+    loadSmartPlannerData();
+  }
+
+  function getSmartPlannerContext() {
+    try {
+      const raw = localStorage.getItem('smartplanner_week') || localStorage.getItem('planner_week_summary');
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch(e) { return null; }
+  }
+
+  function displaySmartPlannerSummary(data) {
+    const card = document.getElementById('smart-planner-card');
+    const summary = document.getElementById('smart-planner-summary');
+    if (!data) return;
+    // Build a readable summary from whatever shape the smart planner exports
+    const lines = [];
+    if (data.busyDays && data.busyDays.length) lines.push(`Busy days: ${data.busyDays.join(', ')}`);
+    if (data.freeDays && data.freeDays.length) lines.push(`Free days: ${data.freeDays.join(', ')}`);
+    if (data.notes) lines.push(data.notes);
+    if (data.summary) lines.push(data.summary);
+    if (!lines.length) lines.push('Smart planner connected — busy/free days will inform your meal plan.');
+    summary.textContent = lines.join(' · ');
+    card.style.display = 'block';
+  }
+
+  function buildSmartPlannerPromptContext() {
+    const data = getSmartPlannerContext();
+    if (!data) return '';
+    const parts = [];
+    if (data.busyDays && data.busyDays.length) parts.push(`Hannah has busy days on: ${data.busyDays.join(', ')} — flag these days in the plan.`);
+    if (data.freeDays && data.freeDays.length) parts.push(`She has more free time on: ${data.freeDays.join(', ')}.`);
+    if (data.notes) parts.push(data.notes);
+    return parts.length ? '\n\nSmart planner context: ' + parts.join(' ') : '';
+  }
+
+  // ── Favourites ──
+  function isFavourite(name) { return favourites.some(f => f.name === name); }
+
+  function toggleFavourite(meal) {
+    const idx = favourites.findIndex(f => f.name === meal.name);
+    if (idx >= 0) {
+      favourites.splice(idx, 1);
+    } else {
+      favourites.push({ ...meal, savedAt: Date.now() });
+    }
+    saveState();
+    renderFavourites();
+    // Update any visible heart buttons
+    document.querySelectorAll('.heart-btn').forEach(btn => {
+      if (btn.dataset.name === meal.name) btn.classList.toggle('active', isFavourite(meal.name));
+    });
+  }
+
+  function renderFavourites() {
+    const el = document.getElementById('favs-content');
+    if (!el) return;
+    if (!favourites.length) {
+      el.innerHTML = '<p style="font-size:14px;color:var(--text-2);">No favourites yet — heart a meal from AI suggestions to save it here.</p>';
+      return;
+    }
+    const typeColor = { breakfast:'pill-amber', lunch:'pill-green', dinner:'pill-blue' };
+    el.innerHTML = `<div class="card" style="padding:0.5rem 1.25rem;">` +
+      favourites.map((m, i) => `
+        <div class="fav-card">
+          <div class="fav-info">
+            <div class="fav-name">${m.name}</div>
+            <div class="fav-meta">
+              <span class="pill ${typeColor[m.type]||'pill-green'}" style="font-size:11px;">${m.type}</span>
+              &nbsp;${m.calories} kcal · ${m.time}
+            </div>
+          </div>
+          <div class="fav-actions">
+            <button class="btn" style="font-size:12px;padding:6px 10px;" onclick='addMealToPlan(${JSON.stringify(m)})'>+ Plan</button>
+            <button class="btn" style="font-size:12px;padding:6px 10px;" onclick="getRecipe('${encodeURIComponent(m.name)}','${m.calories}')">Recipe</button>
+            <button class="heart-btn active" data-name="${m.name}" onclick='toggleFavourite(${JSON.stringify(m)})' title="Remove from favourites">♥</button>
+          </div>
+        </div>
+      `).join('') + '</div>';
+  }
+
+  // ── Meal suggestion rendering (with heart button) ──
   const typeColor = { breakfast:'pill-amber', lunch:'pill-green', dinner:'pill-blue' };
 
   function renderSuggestions(meals) {
     const out = document.getElementById('suggest-results');
-    out.innerHTML = meals.map((m,i) => `
+    out.innerHTML = meals.map((m) => `
       <div class="card meal-card">
-        <div style="margin-bottom:6px;">
-          <span class="pill ${typeColor[m.type]||'pill-green'}">${m.type}</span>
-          <span class="pill" style="background:var(--surface-2);color:var(--text-2);">${m.time}</span>
-          ${(m.tags||[]).map(t=>`<span class="pill" style="background:var(--surface-2);color:var(--text-2);">${t}</span>`).join('')}
-        </div>
-        <div class="meal-name">${m.name}</div>
-        <div class="meal-why">${m.why}</div>
-        <div class="macro-row">
-          <span class="macro-chip">${m.calories} kcal</span>
-          <span class="macro-chip">${m.protein}g protein</span>
-          <span class="macro-chip">${m.carbs}g carbs</span>
-          <span class="macro-chip">${m.fat}g fat</span>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+          <div style="flex:1;min-width:0;">
+            <div style="margin-bottom:6px;">
+              <span class="pill ${typeColor[m.type]||'pill-green'}">${m.type}</span>
+              <span class="pill" style="background:var(--surface-2);color:var(--text-2);">${m.time}</span>
+              ${(m.tags||[]).map(t=>`<span class="pill" style="background:var(--surface-2);color:var(--text-2);">${t}</span>`).join('')}
+            </div>
+            <div class="meal-name">${m.name}</div>
+            <div class="meal-why">${m.why}</div>
+            <div class="macro-row">
+              <span class="macro-chip">${m.calories} kcal</span>
+              <span class="macro-chip">${m.protein}g protein</span>
+              <span class="macro-chip">${m.carbs}g carbs</span>
+              <span class="macro-chip">${m.fat}g fat</span>
+            </div>
+          </div>
+          <button class="heart-btn ${isFavourite(m.name)?'active':''}" data-name="${m.name}" onclick='toggleFavourite(${JSON.stringify(m).replace(/'/g,"&#39;")})' title="${isFavourite(m.name)?'Remove from favourites':'Save to favourites'}">♥</button>
         </div>
         <div class="meal-actions">
-          <button class="btn" onclick='addMealToPlan(${JSON.stringify(m)})'>+ Add to plan</button>
+          <button class="btn" onclick='addMealToPlan(${JSON.stringify(m).replace(/'/g,"&#39;")})'>+ Add to plan</button>
           <button class="btn" onclick="getRecipe('${encodeURIComponent(m.name)}','${m.calories}')">View recipe →</button>
         </div>
       </div>
@@ -831,10 +991,20 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Planning your week…';
     const target = getCalorieTarget();
-    const prompt = `Create a 7-day weight loss meal plan for Hannah. No dietary restrictions. 20-40 minute meals. ~${target} calories/day total. Meals should be filling and satisfying. Include breakfast, lunch, and dinner each day. Use varied, interesting recipes she hasn't likely tried before.
+    const wants = document.getElementById('week-wants').value.trim();
+    const favsStr = favourites.length
+      ? `Hannah's favourite meals (try to include some): ${favourites.map(f => f.name).join(', ')}.`
+      : '';
+    const smartCtx = buildSmartPlannerPromptContext();
+    const prompt = `Create a 7-day weight loss meal plan for Hannah. No dietary restrictions. 20-40 minute meals. ~${target} calories/day total. Meals should be filling and satisfying. Include breakfast, lunch, and dinner each day. Use varied, interesting recipes.
+
+${favsStr}
+${wants ? 'This week Hannah wants: ' + wants : ''}${smartCtx}
+
+If a day is flagged as busy from the smart planner context, add a "busy":true field to that day's meals.
 
 Return ONLY this JSON (no markdown, no backticks):
-{"Mon":[{"name":"","type":"breakfast","calories":0,"protein":0,"carbs":0,"fat":0,"time":""},{"name":"","type":"lunch","calories":0,"protein":0,"carbs":0,"fat":0,"time":""},{"name":"","type":"dinner","calories":0,"protein":0,"carbs":0,"fat":0,"time":""}],"Tue":[...],"Wed":[...],"Thu":[...],"Fri":[...],"Sat":[...],"Sun":[...]}`;
+{"Mon":[{"name":"","type":"breakfast","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false},...],"Tue":[...],"Wed":[...],"Thu":[...],"Fri":[...],"Sat":[...],"Sun":[...]}`;
 
     const raw = await callClaude(prompt);
     btn.disabled = false;
@@ -848,16 +1018,44 @@ Return ONLY this JSON (no markdown, no backticks):
     } catch(e) { alert('Generation failed — try again.'); }
   }
 
+  // ── Swap meal ──
+  async function swapMeal(day, mealIndex) {
+    const btn = document.getElementById(`swap-${day}-${mealIndex}`);
+    if (!btn) return;
+    btn.textContent = '…';
+    btn.classList.add('loading');
+    const existing = weekPlan[day][mealIndex];
+    const target = getCalorieTarget();
+    const otherMealsToday = weekPlan[day].filter((_,i) => i !== mealIndex).map(m => m.name).join(', ');
+    const prompt = `Suggest one alternative ${existing.type} meal for Hannah to swap in. Constraints: ~${existing.calories} calories (within 100 kcal), under 40 minutes, weight-loss focused, different from "${existing.name}"${otherMealsToday ? ' and different from: ' + otherMealsToday : ''}. No dietary restrictions.
+Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","why":"one sentence"}`;
+    const raw = await callClaude(prompt);
+    btn.classList.remove('loading');
+    if (!raw) { btn.textContent = 'swap'; return; }
+    try {
+      const meal = JSON.parse(raw.replace(/```json|```/g,'').trim());
+      weekPlan[day][mealIndex] = { ...meal, busy: existing.busy };
+      saveState();
+      renderWeekGrid();
+    } catch(e) { btn.textContent = 'swap'; }
+  }
+
   function renderWeekGrid() {
     const grid = document.getElementById('week-grid');
     if (!grid) return;
     grid.innerHTML = DAYS.map(d => {
       const meals = weekPlan[d] || [];
       const totalCal = meals.reduce((s,m) => s + (m.calories||0), 0);
+      const isBusy = meals.some(m => m.busy);
       return `<div class="day-col">
         <div class="day-label">${d}</div>
+        ${isBusy ? '<div class="busy-badge">busy day</div>' : ''}
         ${meals.length
-          ? meals.map(m => `<div class="day-meal" title="${m.type} · ${m.calories} kcal · ${m.time}" onclick="getRecipe('${encodeURIComponent(m.name)}','${m.calories}')">${m.name}</div>`).join('')
+          ? meals.map((m, i) => `
+            <div class="day-meal-wrap">
+              <div class="day-meal" title="${m.type} · ${m.calories} kcal · ${m.time}" onclick="getRecipe('${encodeURIComponent(m.name)}','${m.calories}')">${m.name}</div>
+              <button class="swap-btn" id="swap-${d}-${i}" onclick="event.stopPropagation();swapMeal('${d}',${i})">swap</button>
+            </div>`).join('')
           : '<div class="day-meal empty">empty</div>'}
         ${totalCal ? `<div class="day-cals">${totalCal} kcal</div>` : ''}
       </div>`;
