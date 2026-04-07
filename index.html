@@ -284,12 +284,61 @@
     input[type=number]:focus, select:focus { border-color: var(--accent); }
     select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23a09d97' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; cursor: pointer; }
 
+    /* ── Action sheet (meal tap on mobile) ── */
+    .action-sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 300; display: flex; align-items: flex-end; justify-content: center; }
+    .action-sheet { background: var(--surface); border-radius: 20px 20px 0 0; padding: 1.25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom)); width: 100%; max-width: 480px; }
+    .action-sheet-handle { width: 36px; height: 4px; background: var(--border-md); border-radius: 999px; margin: 0 auto 1rem; }
+    .action-sheet-title { font-size: 15px; font-weight: 500; margin-bottom: 2px; }
+    .action-sheet-sub { font-size: 13px; color: var(--text-2); margin-bottom: 1rem; }
+    .action-sheet-btns { display: flex; flex-direction: column; gap: 8px; }
+    .action-sheet-btn { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-radius: var(--radius); border: 0.5px solid var(--border); background: var(--surface-2); font-size: 15px; font-family: 'DM Sans', sans-serif; color: var(--text); cursor: pointer; text-align: left; transition: background 0.12s; }
+    .action-sheet-btn:hover, .action-sheet-btn:active { background: var(--accent-light); color: var(--accent-dark); }
+    .action-sheet-btn .as-icon { font-size: 18px; width: 28px; text-align: center; }
+    .action-sheet-btn.danger { color: var(--coral); }
+    .action-sheet-btn.danger:hover { background: var(--coral-light); }
+    .action-sheet-cancel { margin-top: 8px; width: 100%; padding: 13px; border-radius: var(--radius); border: none; background: var(--surface-2); font-size: 15px; font-weight: 500; font-family: 'DM Sans', sans-serif; color: var(--text-2); cursor: pointer; }
+
+    /* ── Bottom tab bar (mobile only) ── */
+    .bottom-nav { display: none; }
+
     /* ── Mobile ── */
     @media (max-width: 680px) {
       .sidebar { display: none; }
-      .main { padding: 1.5rem 1rem; }
+      .main { padding: 1rem 1rem 6rem; max-width: 100%; }
       .stats-grid { grid-template-columns: repeat(2, 1fr); }
-      .week-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .week-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); font-size: 11px; }
+      .day-col { padding: 8px 5px; min-height: 80px; }
+      .day-meal { font-size: 11px; padding: 3px 5px; }
+      .page-title { font-size: 22px; }
+      .page-sub { margin-bottom: 1.25rem; }
+      .btn { padding: 10px 14px; font-size: 13px; }
+      .profile-grid { grid-template-columns: 1fr; }
+      .profile-field[style*="span 2"] { grid-column: span 1; }
+      .setup-row { flex-direction: column; }
+      .card { padding: 1rem; }
+      /* swap btn always visible on touch */
+      .swap-btn { opacity: 0.7; font-size: 9px; padding: 1px 4px; }
+
+      /* bottom nav */
+      .bottom-nav {
+        display: flex;
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        background: var(--surface);
+        border-top: 0.5px solid var(--border);
+        padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+        z-index: 200;
+        justify-content: space-around;
+      }
+      .bottom-nav-item {
+        display: flex; flex-direction: column; align-items: center; gap: 3px;
+        padding: 4px 8px; border: none; background: transparent;
+        font-family: 'DM Sans', sans-serif; font-size: 10px; color: var(--text-3);
+        cursor: pointer; transition: color 0.15s; min-width: 52px;
+      }
+      .bottom-nav-item .bn-icon { font-size: 20px; line-height: 1; }
+      .bottom-nav-item.active { color: var(--accent-dark); }
+      .bottom-nav-item.active .bn-icon { color: var(--accent); }
     }
   </style>
 </head>
@@ -488,10 +537,12 @@
           <div class="profile-field">
             <label class="field-label">Current weight (kg)</label>
             <input type="number" id="p-weight" placeholder="e.g. 146" min="30" max="300" oninput="recalculate()" />
+            <span id="p-weight-st" style="font-size:12px;color:var(--text-3);"></span>
           </div>
           <div class="profile-field">
             <label class="field-label">Height (cm)</label>
             <input type="number" id="p-height" placeholder="e.g. 168" min="100" max="250" oninput="recalculate()" />
+            <span id="p-height-ft" style="font-size:12px;color:var(--text-3);"></span>
           </div>
           <div class="profile-field">
             <label class="field-label">Age</label>
@@ -500,6 +551,7 @@
           <div class="profile-field">
             <label class="field-label">Goal weight (kg) <span style="font-weight:400;color:var(--text-3);">optional</span></label>
             <input type="number" id="p-goal-weight" placeholder="e.g. 90" min="30" max="300" oninput="recalculate()" />
+            <span id="p-goal-st" style="font-size:12px;color:var(--text-3);"></span>
           </div>
         </div>
       </div>
@@ -519,9 +571,9 @@
           <div class="profile-field" style="grid-column: span 2;">
             <label class="field-label">Weekly loss goal</label>
             <select id="p-deficit" onchange="recalculate()">
-              <option value="250">Slow &amp; steady — 0.5 lb/week (−250 kcal)</option>
-              <option value="500" selected>Moderate — 1 lb/week (−500 kcal)</option>
-              <option value="750">Faster loss — 1.5 lb/week (−750 kcal)</option>
+              <option value="250">Slow &amp; steady — 0.25 kg/week (−250 kcal)</option>
+              <option value="500" selected>Moderate — 0.5 kg/week (−500 kcal)</option>
+              <option value="750">Faster loss — 0.75 kg/week (−750 kcal)</option>
             </select>
           </div>
         </div>
@@ -559,7 +611,44 @@
   </main>
 </div>
 
-<script>
+<!-- Bottom navigation (mobile) -->
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="bottom-nav-item active" onclick="showTab('suggest',this)" data-tab="suggest">
+    <span class="bn-icon">✦</span>
+    <span>Suggest</span>
+  </button>
+  <button class="bottom-nav-item" onclick="showTab('week',this)" data-tab="week">
+    <span class="bn-icon">▦</span>
+    <span>Plan</span>
+  </button>
+  <button class="bottom-nav-item" onclick="showTab('shopping',this)" data-tab="shopping">
+    <span class="bn-icon">⊡</span>
+    <span>Shopping</span>
+  </button>
+  <button class="bottom-nav-item" onclick="showTab('tracker',this)" data-tab="tracker">
+    <span class="bn-icon">◎</span>
+    <span>This week</span>
+  </button>
+  <button class="bottom-nav-item" onclick="showTab('favourites',this)" data-tab="favourites">
+    <span class="bn-icon">♡</span>
+    <span>Saved</span>
+  </button>
+  <button class="bottom-nav-item" onclick="showTab('profile',this)" data-tab="profile">
+    <span class="bn-icon">◇</span>
+    <span>Profile</span>
+  </button>
+</nav>
+
+<!-- Meal action sheet -->
+<div class="action-sheet-overlay" id="action-sheet" style="display:none;" onclick="closeActionSheet()">
+  <div class="action-sheet" onclick="event.stopPropagation()">
+    <div class="action-sheet-handle"></div>
+    <div class="action-sheet-title" id="as-title"></div>
+    <div class="action-sheet-sub" id="as-sub"></div>
+    <div class="action-sheet-btns" id="as-btns"></div>
+    <button class="action-sheet-cancel" onclick="closeActionSheet()">Cancel</button>
+  </div>
+</div>
   const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   let weekPlan = {};
   let shoppingItems = [];
@@ -743,6 +832,19 @@
     if (profile.weight && profile.height && profile.age) recalculate();
   }
 
+  function kgToStone(kg) {
+    const totalLbs = kg * 2.20462;
+    const st = Math.floor(totalLbs / 14);
+    const lbs = Math.round(totalLbs % 14);
+    return `${st} st ${lbs} lb`;
+  }
+  function cmToFtIn(cm) {
+    const totalIn = cm / 2.54;
+    const ft = Math.floor(totalIn / 12);
+    const inch = Math.round(totalIn % 12);
+    return `${ft} ft ${inch} in`;
+  }
+
   function recalculate() {
     const w = parseFloat(document.getElementById('p-weight').value);
     const h = parseFloat(document.getElementById('p-height').value);
@@ -750,24 +852,37 @@
     const gw = parseFloat(document.getElementById('p-goal-weight').value);
     const act = parseFloat(document.getElementById('p-activity').value);
     const def = parseInt(document.getElementById('p-deficit').value);
+
+    // Show UK unit conversions
+    const wSt = document.getElementById('p-weight-st');
+    const hFt = document.getElementById('p-height-ft');
+    const gSt = document.getElementById('p-goal-st');
+    if (wSt && w) wSt.textContent = kgToStone(w);
+    if (hFt && h) hFt.textContent = cmToFtIn(h);
+    if (gSt && gw) gSt.textContent = kgToStone(gw);
+
     if (!w || !h || !a) return;
     profile = { weight: w, height: h, age: a, goalWeight: gw || null, activity: act, deficit: def };
     const { bmr, tdee, target } = calcTargets(profile);
     document.getElementById('r-bmr').textContent = bmr.toLocaleString();
     document.getElementById('r-tdee').textContent = tdee.toLocaleString();
     document.getElementById('r-target').textContent = target.toLocaleString();
+
     if (gw && gw < w) {
       const kgToLose = w - gw;
+      // 0.5 kg/week at 500 kcal deficit, scaled
       const weeksEst = Math.round((kgToLose * 7700) / (def * 7));
+      const months = (weeksEst / 4.33).toFixed(1);
       document.getElementById('r-weeks').textContent = weeksEst;
-      document.getElementById('r-weeks-label').textContent = 'weeks estimated';
+      document.getElementById('r-weeks-label').textContent = `weeks (~${months} months)`;
     } else {
       document.getElementById('r-weeks').textContent = '–';
       document.getElementById('r-weeks-label').textContent = 'add goal weight';
     }
+
     const safeNote = target < 1400
       ? 'Note: your target is on the lower side. Make sure meals are filling and nutrient-dense, and consider speaking to your GP if you feel tired or unwell.'
-      : `At ${def} kcal below your maintenance, you can expect steady, sustainable progress. Eating filling, protein-rich meals will help manage appetite.`;
+      : `At ${def} kcal below your maintenance, you can expect steady, sustainable progress of around ${(def/7700*7).toFixed(2)} kg per week. Filling, protein-rich meals will help manage appetite.`;
     document.getElementById('r-note').textContent = safeNote;
     document.getElementById('results-card').style.display = 'block';
     updateSidebarTarget();
@@ -777,8 +892,12 @@
   function showTab(id, btn) {
     document.querySelectorAll('.section').forEach(s => s.classList.remove('visible'));
     document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.bottom-nav-item').forEach(b => b.classList.remove('active'));
     document.getElementById(id).classList.add('visible');
     if (btn) btn.classList.add('active');
+    // Also activate matching bottom nav item
+    const bnMatch = document.querySelector(`.bottom-nav-item[data-tab="${id}"]`);
+    if (bnMatch) bnMatch.classList.add('active');
     if (id === 'tracker') renderTracker();
     if (id === 'week') { renderWeekGrid(); loadSmartPlannerData(); }
     if (id === 'shopping') renderShoppingList();
@@ -815,8 +934,7 @@
     const mood = [...document.querySelectorAll('#mood-chips .chip.on')].map(c => c.textContent).join(', ');
     const extra = document.getElementById('extra-input').value;
     const typeStr = mealType ? `Focus on ${mealType} meals only.` : 'Mix of breakfast, lunch, and dinner.';
-    const target = getCalorieTarget();
-    const prompt = `You are a weight loss meal planner for Hannah. She has no dietary restrictions, wants meals under 40 minutes, targets ~${target} calories/day, and struggles with appetite (needs filling meals), variety, and planning.
+    const prompt = `You are a weight loss meal planner for Hannah, who is based in the UK. She has no dietary restrictions, wants meals under 40 minutes, targets ~${target} calories/day, and struggles with appetite (needs filling meals), variety, and planning. Use UK ingredient names and supermarket-friendly portions (e.g. rashers not strips, courgette not zucchini, chips not fries where relevant, grams not ounces).
 
 ${typeStr}
 Mood/preferences today: ${mood || 'no preference'}
@@ -996,7 +1114,7 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
       ? `Hannah's favourite meals (try to include some): ${favourites.map(f => f.name).join(', ')}.`
       : '';
     const smartCtx = buildSmartPlannerPromptContext();
-    const prompt = `Create a 7-day weight loss meal plan for Hannah. No dietary restrictions. 20-40 minute meals. ~${target} calories/day total. Meals should be filling and satisfying. Include breakfast, lunch, and dinner each day. Use varied, interesting recipes.
+    const prompt = `Create a 7-day weight loss meal plan for Hannah, who is based in the UK. No dietary restrictions. 20-40 minute meals. ~${target} calories/day total. Meals should be filling and satisfying. Include breakfast, lunch, and dinner each day. Use varied, interesting recipes with UK ingredient names and supermarket-friendly portions (grams, not ounces; ml not fl oz; courgette not zucchini, etc.).
 
 ${favsStr}
 ${wants ? 'This week Hannah wants: ' + wants : ''}${smartCtx}
@@ -1040,6 +1158,56 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
     } catch(e) { btn.textContent = 'swap'; }
   }
 
+  // ── Meal action sheet ──
+  let _asDay = null, _asIdx = null;
+
+  function openMealActionSheet(day, idx) {
+    _asDay = day; _asIdx = idx;
+    const meal = weekPlan[day][idx];
+    if (!meal) return;
+    const faved = isFavourite(meal.name);
+    document.getElementById('as-title').textContent = meal.name;
+    document.getElementById('as-sub').textContent = `${meal.type} · ${meal.calories} kcal · ${meal.time}`;
+    document.getElementById('as-btns').innerHTML = `
+      <button class="action-sheet-btn" onclick="getRecipe('${encodeURIComponent(meal.name)}','${meal.calories}');closeActionSheet()">
+        <span class="as-icon">📖</span> View recipe
+      </button>
+      <button class="action-sheet-btn" onclick="asFavourite();closeActionSheet()">
+        <span class="as-icon">${faved ? '♥' : '♡'}</span> ${faved ? 'Remove from favourites' : 'Save to favourites'}
+      </button>
+      <button class="action-sheet-btn" onclick="asSwap()">
+        <span class="as-icon">↻</span> Swap for something else
+      </button>
+      <button class="action-sheet-btn danger" onclick="asRemove();closeActionSheet()">
+        <span class="as-icon">×</span> Remove from plan
+      </button>
+    `;
+    document.getElementById('action-sheet').style.display = 'flex';
+  }
+
+  function closeActionSheet() {
+    document.getElementById('action-sheet').style.display = 'none';
+    _asDay = null; _asIdx = null;
+  }
+
+  function asFavourite() {
+    if (_asDay === null) return;
+    const meal = weekPlan[_asDay][_asIdx];
+    if (meal) toggleFavourite(meal);
+  }
+
+  async function asSwap() {
+    if (_asDay === null) return;
+    closeActionSheet();
+    await swapMeal(_asDay, _asIdx);
+  }
+
+  function asRemove() {
+    if (_asDay === null) return;
+    weekPlan[_asDay].splice(_asIdx, 1);
+    saveState(); renderWeekGrid(); renderTracker();
+  }
+
   function renderWeekGrid() {
     const grid = document.getElementById('week-grid');
     if (!grid) return;
@@ -1049,12 +1217,14 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
       const isBusy = meals.some(m => m.busy);
       return `<div class="day-col">
         <div class="day-label">${d}</div>
-        ${isBusy ? '<div class="busy-badge">busy day</div>' : ''}
+        ${isBusy ? '<div class="busy-badge">busy</div>' : ''}
         ${meals.length
           ? meals.map((m, i) => `
             <div class="day-meal-wrap">
-              <div class="day-meal" title="${m.type} · ${m.calories} kcal · ${m.time}" onclick="getRecipe('${encodeURIComponent(m.name)}','${m.calories}')">${m.name}</div>
-              <button class="swap-btn" id="swap-${d}-${i}" onclick="event.stopPropagation();swapMeal('${d}',${i})">swap</button>
+              <div class="day-meal" title="${m.type} · ${m.calories} kcal · ${m.time}"
+                onclick="openMealActionSheet('${d}',${i})">${m.name}</div>
+              <button class="swap-btn" id="swap-${d}-${i}"
+                onclick="event.stopPropagation();swapMeal('${d}',${i})">↻</button>
             </div>`).join('')
           : '<div class="day-meal empty">empty</div>'}
         ${totalCal ? `<div class="day-cals">${totalCal} kcal</div>` : ''}
@@ -1171,7 +1341,7 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
       ? Math.round(allMeals.reduce((s,m) => s + (m.calories||0),0) / Math.max(1, Object.values(weekPlan).filter(d=>d.length>0).length))
       : 0;
     const target = getCalorieTarget();
-    const prompt = `Give Hannah one short, practical, personalised nutrition tip for weight loss. Context: ${avgCal ? 'averaging ' + avgCal + ' kcal/day against a target of ' + target : 'just starting out'}, weight ${profile.weight}kg, no dietary restrictions, meals under 40 minutes, struggles with appetite and trying new meals. Keep it warm, encouraging, and specific — 3-4 sentences max.`;
+    const prompt = `Give Hannah one short, practical, personalised nutrition tip for weight loss. Context: ${avgCal ? 'averaging ' + avgCal + ' kcal/day against a target of ' + target : 'just starting out'}, weight ${profile.weight}kg (${kgToStone(profile.weight)}), no dietary restrictions, meals under 40 minutes, based in the UK, struggles with appetite and trying new meals. Use UK measurements and food references. Keep it warm, encouraging, and specific — 3-4 sentences max.`;
     const raw = await callClaude(prompt);
     el.textContent = raw || 'Could not generate tip — try again.';
   }
