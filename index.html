@@ -762,6 +762,7 @@
     localStorage.setItem('hmp_plan', JSON.stringify(weekPlan));
     localStorage.setItem('hmp_shopping', JSON.stringify(shoppingItems));
     localStorage.setItem('hmp_favs', JSON.stringify(favourites));
+    localStorage.setItem('hmp_profile', JSON.stringify(profile));
   }
   function loadLocalState() {
     try {
@@ -771,6 +772,8 @@
       if (s) shoppingItems = JSON.parse(s);
       const f = localStorage.getItem('hmp_favs');
       if (f) favourites = JSON.parse(f);
+      const pr = localStorage.getItem('hmp_profile');
+      if (pr) profile = { ...profile, ...JSON.parse(pr) };
     } catch(e) {}
   }
 
@@ -787,7 +790,7 @@
       const res = await fetch(`${JB_BASE}/b`, {
         method: 'POST',
         headers: { ...(await jbHeaders()), 'X-Bin-Name': 'hannah-meal-planner', 'X-Collection-Id': '' },
-        body: JSON.stringify({ weekPlan, shoppingItems })
+        body: JSON.stringify({ weekPlan, shoppingItems, favourites, profile })
       });
       const data = await res.json();
       if (data.metadata?.id) {
@@ -811,12 +814,15 @@
       if (record.weekPlan) weekPlan = record.weekPlan;
       if (record.shoppingItems) shoppingItems = record.shoppingItems;
       if (record.favourites) favourites = record.favourites;
+      if (record.profile) profile = { ...profile, ...record.profile };
       DAYS.forEach(d => { if (!weekPlan[d]) weekPlan[d] = []; });
       setSyncStatus('ok', 'synced');
     } catch(e) {
       setSyncStatus('err', 'load failed — using local');
       loadLocalState();
     }
+    populateProfileFields();
+    updateSidebarTarget();
     renderWeekGrid();
     renderShoppingList();
     renderFavourites();
@@ -832,7 +838,7 @@
       const res = await fetch(`${JB_BASE}/b/${binId}`, {
         method: 'PUT',
         headers: await jbHeaders(),
-        body: JSON.stringify({ weekPlan, shoppingItems, favourites })
+        body: JSON.stringify({ weekPlan, shoppingItems, favourites, profile })
       });
       if (!res.ok) throw new Error(res.status);
       setSyncStatus('ok', 'synced just now');
@@ -840,10 +846,21 @@
   }
 
   function saveState() {
-    saveLocalState();
+    saveLocalState(); // always write to localStorage immediately
     clearTimeout(syncTimer);
     syncTimer = setTimeout(saveToJSONBin, 1200);
   }
+
+  // ── Save instantly when switching away from the app ──
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      // Cancel any pending delayed save and write to localStorage right now
+      saveLocalState();
+      // Also attempt JSONBin sync — use sendBeacon-style if available for reliability
+      clearTimeout(syncTimer);
+      saveToJSONBin();
+    }
+  });
 
   // ── Profile ──
   function loadProfile() {
@@ -855,6 +872,7 @@
 
   function saveProfile() {
     localStorage.setItem('hmp_profile', JSON.stringify(profile));
+    saveState();
     updateSidebarTarget();
     renderTracker();
     alert(`Target updated to ${getCalorieTarget()} kcal/day. Regenerate your weekly plan to apply it.`);
