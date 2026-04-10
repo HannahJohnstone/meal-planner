@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hannah's Meal Planner</title>
+  <link rel="manifest" href="/meal-planner/manifest.json" />
+  <meta name="theme-color" content="#1D9E75" />
+  <link rel="apple-touch-icon" href="/meal-planner/icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Serif+Display&display=swap" rel="stylesheet" />
   <style>
@@ -1417,6 +1420,13 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
     const prompt = `Give Hannah one short, practical, personalised nutrition tip for weight loss. Context: ${avgCal ? 'averaging ' + avgCal + ' kcal/day against a target of ' + target : 'just starting out'}, weight ${profile.weight}kg (${kgToStone(profile.weight)}), no dietary restrictions, meals under 40 minutes, based in the UK, struggles with appetite and trying new meals. Use UK measurements and food references. Keep it warm, encouraging, and specific — 3-4 sentences max.`;
     const raw = await callClaude(prompt);
     el.textContent = raw || 'Could not generate tip — try again.';
+  }
+</script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/meal-planner/sw.js');
+    });
   }
 </script>
 </body>
