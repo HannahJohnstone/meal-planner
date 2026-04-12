@@ -4,9 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hannah's Meal Planner</title>
-  <link rel="manifest" href="/meal-planner/manifest.json" />
-  <meta name="theme-color" content="#1D9E75" />
-  <link rel="apple-touch-icon" href="/meal-planner/icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Serif+Display&display=swap" rel="stylesheet" />
   <style>
@@ -311,6 +308,13 @@
     .recipe-modal-body pre { white-space: pre-wrap; font-family: 'DM Sans', sans-serif; font-size: 14px; line-height: 1.75; color: var(--text); }
     .recipe-modal-loading { color: var(--text-3); font-style: italic; font-size: 14px; }
 
+    /* ── Pin button ── */
+    .pin-btn { position: absolute; left: 4px; top: 50%; transform: translateY(-50%); background: transparent; border: none; cursor: pointer; font-size: 11px; color: var(--text-3); padding: 1px 3px; opacity: 0; transition: opacity 0.15s; line-height: 1; }
+    .day-meal-wrap:hover .pin-btn { opacity: 1; }
+    .pin-btn.pinned { opacity: 1; color: var(--accent-dark); }
+    .day-meal.pinned { background: var(--accent-light); color: var(--accent-dark); padding-left: 18px; }
+    @media (max-width: 680px) { .pin-btn { opacity: 0.7; } }
+
     /* ── Action sheet (meal tap on mobile) ── */
     .action-sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 300; display: flex; align-items: flex-end; justify-content: center; }
     .action-sheet { background: var(--surface); border-radius: 20px 20px 0 0; padding: 1.25rem 1.25rem calc(1.25rem + env(safe-area-inset-bottom)); width: 100%; max-width: 480px; }
@@ -393,6 +397,9 @@
       </button>
       <button class="nav-item" onclick="showTab('favourites',this)">
         <span class="nav-icon">♡</span> Favourites
+      </button>
+      <button class="nav-item" onclick="showTab('snacks',this)">
+        <span class="nav-icon">◈</span> Snack bank
       </button>
       <button class="nav-item" onclick="showTab('profile',this)">
         <span class="nav-icon">◇</span> My profile
@@ -479,6 +486,16 @@
         <textarea id="week-wants" placeholder="e.g. 'I really want pasta on Wednesday', 'nothing with fish this week', 'I have leftover rice to use up'…" style="min-height:56px;"></textarea>
       </div>
 
+      <div class="card" id="prefs-summary-card" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <div>
+            <span class="label" style="margin-bottom:3px;">Your food preferences</span>
+            <div id="prefs-summary-text" style="font-size:13px;color:var(--text-2);line-height:1.5;"></div>
+          </div>
+          <button class="btn" style="font-size:12px;padding:6px 10px;flex-shrink:0;" onclick="showTab('profile',document.querySelector('.nav-item:last-child'))">Edit</button>
+        </div>
+      </div>
+
       <div class="week-grid" id="week-grid"></div>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <button class="btn btn-primary" id="gen-week-btn" onclick="generateWeek()">Auto-generate full week</button>
@@ -550,6 +567,43 @@
       <p class="page-sub">Meals you've loved. Heart any meal card to save it here — the AI will try to include them in your weekly plan.</p>
       <div id="favs-content">
         <p style="font-size:14px;color:var(--text-2);">No favourites yet — heart a meal from the AI suggestions to save it.</p>
+      </div>
+    </div>
+
+    <!-- Snack bank -->
+    <div id="snacks" class="section">
+      <h2 class="page-title">Snack bank</h2>
+      <p class="page-sub">Get AI snack ideas based on your remaining calories, then save the ones you like.</p>
+
+      <div class="card">
+        <span class="label">Get snack ideas</span>
+        <div class="chip-row" id="snack-mood-chips">
+          <button class="chip" onclick="toggleChip(this)">something sweet</button>
+          <button class="chip" onclick="toggleChip(this)">something savoury</button>
+          <button class="chip" onclick="toggleChip(this)">high protein</button>
+          <button class="chip" onclick="toggleChip(this)">quick grab</button>
+          <button class="chip" onclick="toggleChip(this)">filling</button>
+          <button class="chip" onclick="toggleChip(this)">light</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:1rem;flex-wrap:wrap;">
+          <label style="font-size:13px;color:var(--text-2);white-space:nowrap;">Calories remaining today:</label>
+          <input type="number" id="snack-cals-remaining" placeholder="e.g. 300" min="50" max="800"
+            style="width:120px;padding:8px 12px;font-size:14px;" />
+          <span style="font-size:12px;color:var(--text-3);">or leave blank to get general ideas</span>
+        </div>
+        <button class="btn btn-primary" id="snack-suggest-btn" onclick="getSnackSuggestions()">Suggest snacks</button>
+      </div>
+
+      <div id="snack-suggest-output" style="display:none;">
+        <span class="label" style="margin-top:1.5rem;">Snack ideas</span>
+        <div id="snack-suggest-results"></div>
+      </div>
+
+      <div id="snack-bank-section" style="margin-top:1.5rem;">
+        <span class="label">My snack bank</span>
+        <div id="snack-bank-content">
+          <p style="font-size:14px;color:var(--text-2);">No snacks saved yet — get some ideas above and save the ones you like.</p>
+        </div>
       </div>
     </div>
 
@@ -633,6 +687,34 @@
         <div style="margin-top:1rem;font-size:13px;color:var(--text-2);line-height:1.6;" id="r-note"></div>
         <button class="btn btn-primary" style="margin-top:1rem;" onclick="saveProfile()">Save &amp; apply this target</button>
       </div>
+
+      <div class="card">
+        <span class="label">Food preferences</span>
+        <p style="font-size:13px;color:var(--text-2);margin-bottom:1rem;">These are remembered and applied to every meal suggestion and weekly plan automatically.</p>
+        <div class="profile-grid" style="margin-bottom:1rem;">
+          <div class="profile-field">
+            <label class="field-label">Foods I don't eat</label>
+            <input type="text" id="pref-dislikes" placeholder="e.g. mushrooms, olives, blue cheese" oninput="updatePrefsPreview()" />
+          </div>
+          <div class="profile-field">
+            <label class="field-label">Allergies or intolerances</label>
+            <input type="text" id="pref-allergies" placeholder="e.g. nuts, shellfish, lactose" oninput="updatePrefsPreview()" />
+          </div>
+          <div class="profile-field">
+            <label class="field-label">Cuisines I love</label>
+            <input type="text" id="pref-loves" placeholder="e.g. Italian, Asian, Mexican" oninput="updatePrefsPreview()" />
+          </div>
+          <div class="profile-field">
+            <label class="field-label">Cuisines I avoid</label>
+            <input type="text" id="pref-avoid-cuisines" placeholder="e.g. spicy food, raw fish" oninput="updatePrefsPreview()" />
+          </div>
+        </div>
+        <div class="profile-field" style="margin-bottom:1rem;">
+          <label class="field-label">Anything else</label>
+          <textarea id="pref-other" placeholder="e.g. 'I prefer simple recipes', 'I batch cook on Sundays', 'I don't eat red meat'" style="min-height:56px;" oninput="updatePrefsPreview()"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="savePreferences()">Save preferences</button>
+      </div>
     </div>
 
   </main>
@@ -661,13 +743,13 @@
     <span class="bn-icon">▦</span>
     <span>Plan</span>
   </button>
+  <button class="bottom-nav-item" onclick="showTab('snacks',this)" data-tab="snacks">
+    <span class="bn-icon">◈</span>
+    <span>Snacks</span>
+  </button>
   <button class="bottom-nav-item" onclick="showTab('shopping',this)" data-tab="shopping">
     <span class="bn-icon">⊡</span>
     <span>Shopping</span>
-  </button>
-  <button class="bottom-nav-item" onclick="showTab('tracker',this)" data-tab="tracker">
-    <span class="bn-icon">◎</span>
-    <span>This week</span>
   </button>
   <button class="bottom-nav-item" onclick="showTab('favourites',this)" data-tab="favourites">
     <span class="bn-icon">♡</span>
@@ -695,8 +777,9 @@
   let weekPlan = {};
   let shoppingItems = [];
   let favourites = [];
+  let snackBank = [];
   let syncTimer = null;
-  let profile = { weight: 146, height: 168, age: 31, goalWeight: null, activity: 1.2, deficit: 500 };
+  let profile = { weight: 146, height: 168, age: 31, goalWeight: null, activity: 1.2, deficit: 500, prefs: { dislikes: '', allergies: '', loves: '', avoidCuisines: '', other: '' } };
   DAYS.forEach(d => weekPlan[d] = []);
 
   // ── Calorie calculation (Mifflin-St Jeor for women) ──
@@ -765,6 +848,7 @@
     localStorage.setItem('hmp_plan', JSON.stringify(weekPlan));
     localStorage.setItem('hmp_shopping', JSON.stringify(shoppingItems));
     localStorage.setItem('hmp_favs', JSON.stringify(favourites));
+    localStorage.setItem('hmp_snacks', JSON.stringify(snackBank));
     localStorage.setItem('hmp_profile', JSON.stringify(profile));
   }
   function loadLocalState() {
@@ -775,6 +859,8 @@
       if (s) shoppingItems = JSON.parse(s);
       const f = localStorage.getItem('hmp_favs');
       if (f) favourites = JSON.parse(f);
+      const sn = localStorage.getItem('hmp_snacks');
+      if (sn) snackBank = JSON.parse(sn);
       const pr = localStorage.getItem('hmp_profile');
       if (pr) profile = { ...profile, ...JSON.parse(pr) };
     } catch(e) {}
@@ -793,7 +879,7 @@
       const res = await fetch(`${JB_BASE}/b`, {
         method: 'POST',
         headers: { ...(await jbHeaders()), 'X-Bin-Name': 'hannah-meal-planner', 'X-Collection-Id': '' },
-        body: JSON.stringify({ weekPlan, shoppingItems, favourites, profile })
+        body: JSON.stringify({ weekPlan, shoppingItems, favourites, snackBank, profile })
       });
       const data = await res.json();
       if (data.metadata?.id) {
@@ -817,6 +903,7 @@
       if (record.weekPlan) weekPlan = record.weekPlan;
       if (record.shoppingItems) shoppingItems = record.shoppingItems;
       if (record.favourites) favourites = record.favourites;
+      if (record.snackBank) snackBank = record.snackBank;
       if (record.profile) profile = { ...profile, ...record.profile };
       DAYS.forEach(d => { if (!weekPlan[d]) weekPlan[d] = []; });
       setSyncStatus('ok', 'synced');
@@ -829,6 +916,7 @@
     renderWeekGrid();
     renderShoppingList();
     renderFavourites();
+    renderSnackBank();
     renderTracker();
   }
 
@@ -841,7 +929,7 @@
       const res = await fetch(`${JB_BASE}/b/${binId}`, {
         method: 'PUT',
         headers: await jbHeaders(),
-        body: JSON.stringify({ weekPlan, shoppingItems, favourites, profile })
+        body: JSON.stringify({ weekPlan, shoppingItems, favourites, snackBank, profile })
       });
       if (!res.ok) throw new Error(res.status);
       setSyncStatus('ok', 'synced just now');
@@ -893,7 +981,61 @@
     document.getElementById('p-goal-weight').value = profile.goalWeight || '';
     document.getElementById('p-activity').value = profile.activity || 1.2;
     document.getElementById('p-deficit').value = profile.deficit || 500;
+    // Populate preferences
+    const pr = profile.prefs || {};
+    document.getElementById('pref-dislikes').value = pr.dislikes || '';
+    document.getElementById('pref-allergies').value = pr.allergies || '';
+    document.getElementById('pref-loves').value = pr.loves || '';
+    document.getElementById('pref-avoid-cuisines').value = pr.avoidCuisines || '';
+    document.getElementById('pref-other').value = pr.other || '';
+    updatePrefsPreview();
     if (profile.weight && profile.height && profile.age) recalculate();
+  }
+
+  function savePreferences() {
+    profile.prefs = {
+      dislikes: document.getElementById('pref-dislikes').value.trim(),
+      allergies: document.getElementById('pref-allergies').value.trim(),
+      loves: document.getElementById('pref-loves').value.trim(),
+      avoidCuisines: document.getElementById('pref-avoid-cuisines').value.trim(),
+      other: document.getElementById('pref-other').value.trim(),
+    };
+    saveState();
+    updatePrefsPreview();
+    alert('Preferences saved — they\'ll apply to your next meal suggestion or plan.');
+  }
+
+  function buildPrefsPromptContext() {
+    const pr = profile.prefs || {};
+    const parts = [];
+    if (pr.allergies) parts.push(`ALLERGIES/INTOLERANCES (never include): ${pr.allergies}`);
+    if (pr.dislikes) parts.push(`Foods she dislikes (avoid): ${pr.dislikes}`);
+    if (pr.loves) parts.push(`Cuisines she enjoys: ${pr.loves}`);
+    if (pr.avoidCuisines) parts.push(`Cuisines/styles to avoid: ${pr.avoidCuisines}`);
+    if (pr.other) parts.push(pr.other);
+    return parts.length ? '\n\nFood preferences:\n' + parts.join('\n') : '';
+  }
+
+  function updatePrefsPreview() {
+    const pr = {
+      dislikes: document.getElementById('pref-dislikes').value.trim(),
+      allergies: document.getElementById('pref-allergies').value.trim(),
+      loves: document.getElementById('pref-loves').value.trim(),
+      avoidCuisines: document.getElementById('pref-avoid-cuisines').value.trim(),
+      other: document.getElementById('pref-other').value.trim(),
+    };
+    const parts = [];
+    if (pr.allergies) parts.push(`Avoids: ${pr.allergies}`);
+    if (pr.dislikes) parts.push(`Dislikes: ${pr.dislikes}`);
+    if (pr.loves) parts.push(`Loves: ${pr.loves}`);
+    if (pr.other) parts.push(pr.other);
+    // Also update the week plan summary card
+    const card = document.getElementById('prefs-summary-card');
+    const text = document.getElementById('prefs-summary-text');
+    if (card && text) {
+      if (parts.length) { text.textContent = parts.join(' · '); card.style.display = 'block'; }
+      else { card.style.display = 'none'; }
+    }
   }
 
   function kgToStone(kg) {
@@ -966,6 +1108,7 @@
     if (id === 'week') { renderWeekGrid(); loadSmartPlannerData(); }
     if (id === 'shopping') renderShoppingList();
     if (id === 'favourites') renderFavourites();
+    if (id === 'snacks') renderSnackBank();
   }
 
   function toggleChip(el) { el.classList.toggle('on'); }
@@ -998,11 +1141,13 @@
     const mood = [...document.querySelectorAll('#mood-chips .chip.on')].map(c => c.textContent).join(', ');
     const extra = document.getElementById('extra-input').value;
     const typeStr = mealType ? `Focus on ${mealType} meals only.` : 'Mix of breakfast, lunch, and dinner.';
-    const prompt = `You are a weight loss meal planner for Hannah, who is based in the UK. She has no dietary restrictions, wants meals under 40 minutes, targets ~${target} calories/day, and struggles with appetite (needs filling meals), variety, and planning. Use UK ingredient names and supermarket-friendly portions (e.g. rashers not strips, courgette not zucchini, chips not fries where relevant, grams not ounces).
+    const target = getCalorieTarget();
+    const prefsCtx = buildPrefsPromptContext();
+    const prompt = `You are a weight loss meal planner for Hannah, who is based in the UK. She has no dietary restrictions unless specified below. She wants meals under 40 minutes, targets ~${target} calories/day, and struggles with appetite (needs filling meals), variety, and planning. Use UK ingredient names and supermarket-friendly portions (e.g. rashers not strips, courgette not zucchini, chips not fries where relevant, grams not ounces).
 
 ${typeStr}
 Mood/preferences today: ${mood || 'no preference'}
-${extra ? 'Extra info: ' + extra : ''}
+${extra ? 'Extra info: ' + extra : ''}${prefsCtx}
 
 Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
 {"meals":[{"name":"string","type":"breakfast|lunch|dinner","calories":0,"protein":0,"carbs":0,"fat":0,"time":"string","tags":["string"],"why":"one sentence why this suits Hannah today","ingredients":["string"]}]}`;
@@ -1190,22 +1335,56 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
       ? `Hannah's favourite meals (try to include some): ${favourites.map(f => f.name).join(', ')}.`
       : '';
     const smartCtx = buildSmartPlannerPromptContext();
-    const prompt = `Create a 7-day weight loss meal plan for Hannah, who is based in the UK. No dietary restrictions. 20-40 minute meals. ~${target} calories/day total. Meals should be filling and satisfying. Include breakfast, lunch, and dinner each day. Use varied, interesting recipes with UK ingredient names and supermarket-friendly portions (grams, not ounces; ml not fl oz; courgette not zucchini, etc.).
+    const prefsCtx = buildPrefsPromptContext();
+
+    // Build a map of pinned meals to preserve
+    const pinnedMeals = {};
+    DAYS.forEach(d => {
+      const pinned = (weekPlan[d] || []).filter(m => m.pinned);
+      if (pinned.length) pinnedMeals[d] = pinned;
+    });
+    const pinnedStr = Object.keys(pinnedMeals).length
+      ? '\n\nPinned meals (keep exactly as-is, do not change these):\n' +
+        Object.entries(pinnedMeals).map(([d, meals]) =>
+          `${d}: ${meals.map(m => `${m.type} = "${m.name}"`).join(', ')}`
+        ).join('\n')
+      : '';
+
+    const prompt = `Create a 7-day weight loss meal plan for Hannah, who is based in the UK. No dietary restrictions unless specified below. 20-40 minute meals. ~${target} calories/day total. Meals should be filling and satisfying. Include breakfast, lunch, and dinner each day. Use varied, interesting recipes with UK ingredient names and supermarket-friendly portions (grams, not ounces; ml not fl oz; courgette not zucchini, etc.).
 
 ${favsStr}
-${wants ? 'This week Hannah wants: ' + wants : ''}${smartCtx}
+${wants ? 'This week Hannah wants: ' + wants : ''}${smartCtx}${prefsCtx}${pinnedStr}
 
-If a day is flagged as busy from the smart planner context, add a "busy":true field to that day's meals.
+If a day is flagged as busy from the smart planner context, add a "busy":true field to that day's meals. For pinned meals, copy them exactly from the pinned list above and set "pinned":true.
 
 Return ONLY this JSON (no markdown, no backticks):
-{"Mon":[{"name":"","type":"breakfast","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false},...],"Tue":[...],"Wed":[...],"Thu":[...],"Fri":[...],"Sat":[...],"Sun":[...]}`;
+{"Mon":[{"name":"","type":"breakfast","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false},...],"Tue":[...],"Wed":[...],"Thu":[...],"Fri":[...],"Sat":[...],"Sun":[...]}`;
 
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Auto-generate full week';
     if (!raw) return;
     try {
-      weekPlan = JSON.parse(raw.replace(/```json|```/g,'').trim());
+      const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+      // Merge: keep pinned meals from existing plan, fill rest from AI response
+      DAYS.forEach(d => {
+        const aiDay = parsed[d] || [];
+        const existingPinned = (weekPlan[d] || []).filter(m => m.pinned);
+        if (existingPinned.length) {
+          // Replace AI meals of matching type with pinned versions
+          const result = aiDay.map(aiMeal => {
+            const pin = existingPinned.find(p => p.type === aiMeal.type);
+            return pin ? { ...pin, pinned: true } : aiMeal;
+          });
+          // Add any pinned meals whose type wasn't in AI response
+          existingPinned.forEach(pin => {
+            if (!result.find(m => m.type === pin.type)) result.push({ ...pin, pinned: true });
+          });
+          weekPlan[d] = result;
+        } else {
+          weekPlan[d] = aiDay;
+        }
+      });
       saveState();
       renderWeekGrid();
       renderTracker();
@@ -1242,11 +1421,15 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
     const meal = weekPlan[day][idx];
     if (!meal) return;
     const faved = isFavourite(meal.name);
+    const pinned = !!meal.pinned;
     document.getElementById('as-title').textContent = meal.name;
     document.getElementById('as-sub').textContent = `${meal.type} · ${meal.calories} kcal · ${meal.time}`;
     document.getElementById('as-btns').innerHTML = `
       <button class="action-sheet-btn" onclick="getRecipe('${encodeURIComponent(meal.name)}','${meal.calories}');closeActionSheet()">
         <span class="as-icon">📖</span> View recipe
+      </button>
+      <button class="action-sheet-btn" onclick="asPin();closeActionSheet()">
+        <span class="as-icon">${pinned ? '📌' : '📍'}</span> ${pinned ? 'Unpin this meal' : 'Pin this meal (keep when regenerating)'}
       </button>
       <button class="action-sheet-btn" onclick="asFavourite();closeActionSheet()">
         <span class="as-icon">${faved ? '♥' : '♡'}</span> ${faved ? 'Remove from favourites' : 'Save to favourites'}
@@ -1264,6 +1447,11 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
   function closeActionSheet() {
     document.getElementById('action-sheet').style.display = 'none';
     _asDay = null; _asIdx = null;
+  }
+
+  function asPin() {
+    if (_asDay === null) return;
+    togglePin(_asDay, _asIdx);
   }
 
   function asFavourite() {
@@ -1284,6 +1472,13 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
     saveState(); renderWeekGrid(); renderTracker();
   }
 
+  function togglePin(day, idx) {
+    if (!weekPlan[day] || !weekPlan[day][idx]) return;
+    weekPlan[day][idx].pinned = !weekPlan[day][idx].pinned;
+    saveState();
+    renderWeekGrid();
+  }
+
   function renderWeekGrid() {
     const grid = document.getElementById('week-grid');
     if (!grid) return;
@@ -1297,7 +1492,9 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
         ${meals.length
           ? meals.map((m, i) => `
             <div class="day-meal-wrap">
-              <div class="day-meal" title="${m.type} · ${m.calories} kcal · ${m.time}"
+              <button class="pin-btn ${m.pinned ? 'pinned' : ''}" title="${m.pinned ? 'Unpin' : 'Pin this meal'}"
+                onclick="event.stopPropagation();togglePin('${d}',${i})">${m.pinned ? '📌' : '📍'}</button>
+              <div class="day-meal ${m.pinned ? 'pinned' : ''}" title="${m.type} · ${m.calories} kcal · ${m.time}"
                 onclick="openMealActionSheet('${d}',${i})">${m.name}</div>
               <button class="swap-btn" id="swap-${d}-${i}"
                 onclick="event.stopPropagation();swapMeal('${d}',${i})">↻</button>
@@ -1421,12 +1618,107 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
     const raw = await callClaude(prompt);
     el.textContent = raw || 'Could not generate tip — try again.';
   }
-</script>
-  <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/meal-planner/sw.js');
-    });
+
+  // ── Snack bank ──
+  async function getSnackSuggestions() {
+    const btn = document.getElementById('snack-suggest-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Finding snacks…';
+
+    const mood = [...document.querySelectorAll('#snack-mood-chips .chip.on')].map(c => c.textContent).join(', ');
+    const calsRemaining = document.getElementById('snack-cals-remaining').value.trim();
+    const target = getCalorieTarget();
+    const prefsCtx = buildPrefsPromptContext();
+    const existingNames = snackBank.map(s => s.name).join(', ');
+
+    const calStr = calsRemaining
+      ? `She has approximately ${calsRemaining} calories remaining today.`
+      : `Her daily target is ${target} kcal — suggest snacks between 100–300 kcal.`;
+
+    const prompt = `Suggest 4 snack ideas for Hannah, who is based in the UK and is trying to lose weight.
+${calStr}
+Mood/craving: ${mood || 'no specific preference'}.
+${existingNames ? 'She already has these in her snack bank, so suggest different ones: ' + existingNames + '.' : ''}
+Snacks should be filling, nutritious, and easy to prepare or grab. Use UK ingredient names and supermarket-friendly options.${prefsCtx}
+
+Return ONLY this JSON (no markdown, no backticks):
+{"snacks":[{"name":"string","calories":0,"protein":0,"carbs":0,"fat":0,"description":"one sentence","why":"why this suits her today"}]}`;
+
+    const raw = await callClaude(prompt);
+    btn.disabled = false;
+    btn.innerHTML = 'Suggest snacks';
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+      renderSnackSuggestions(parsed.snacks);
+    } catch(e) {
+      document.getElementById('snack-suggest-results').innerHTML = '<p style="color:var(--text-2);font-size:14px;">Couldn\'t load suggestions — try again.</p>';
+      document.getElementById('snack-suggest-output').style.display = 'block';
+    }
+  }
+
+  function renderSnackSuggestions(snacks) {
+    const out = document.getElementById('snack-suggest-results');
+    out.innerHTML = snacks.map(s => {
+      const saved = snackBank.some(b => b.name === s.name);
+      return `<div class="card" style="position:relative;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+          <div style="flex:1;min-width:0;">
+            <div class="meal-name">${s.name}</div>
+            <div class="meal-why">${s.why}</div>
+            <div style="font-size:13px;color:var(--text-2);margin-bottom:8px;">${s.description}</div>
+            <div class="macro-row">
+              <span class="macro-chip">${s.calories} kcal</span>
+              <span class="macro-chip">${s.protein}g protein</span>
+              <span class="macro-chip">${s.carbs}g carbs</span>
+              <span class="macro-chip">${s.fat}g fat</span>
+            </div>
+          </div>
+          <button class="heart-btn ${saved ? 'active' : ''}" onclick='toggleSnackSaved(${JSON.stringify(s).replace(/'/g,"&#39;")},this)' title="${saved ? 'Remove from bank' : 'Save to snack bank'}">♥</button>
+        </div>
+      </div>`;
+    }).join('');
+    document.getElementById('snack-suggest-output').style.display = 'block';
+  }
+
+  function toggleSnackSaved(snack, btn) {
+    const idx = snackBank.findIndex(s => s.name === snack.name);
+    if (idx >= 0) {
+      snackBank.splice(idx, 1);
+      btn.classList.remove('active');
+    } else {
+      snackBank.push({ ...snack, savedAt: Date.now() });
+      btn.classList.add('active');
+    }
+    saveState();
+    renderSnackBank();
+  }
+
+  function renderSnackBank() {
+    const el = document.getElementById('snack-bank-content');
+    if (!el) return;
+    if (!snackBank.length) {
+      el.innerHTML = '<p style="font-size:14px;color:var(--text-2);">No snacks saved yet — get some ideas above and save the ones you like.</p>';
+      return;
+    }
+    el.innerHTML = `<div class="card" style="padding:0.5rem 1.25rem;">` +
+      snackBank.map((s, i) => `
+        <div class="fav-card">
+          <div class="fav-info">
+            <div class="fav-name">${s.name}</div>
+            <div class="fav-meta">${s.calories} kcal · ${s.protein}g protein · ${s.description || ''}</div>
+          </div>
+          <div class="fav-actions">
+            <button class="heart-btn active" onclick="removeSnack(${i})" title="Remove from bank">♥</button>
+          </div>
+        </div>
+      `).join('') + '</div>';
+  }
+
+  function removeSnack(idx) {
+    snackBank.splice(idx, 1);
+    saveState();
+    renderSnackBank();
   }
 </script>
 </body>
