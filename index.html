@@ -389,6 +389,9 @@
       <button class="nav-item" onclick="showTab('week',this)">
         <span class="nav-icon">▦</span> Weekly plan
       </button>
+      <button class="nav-item" onclick="showTab('ahead',this)">
+        <span class="nav-icon">▷</span> Week ahead
+      </button>
       <button class="nav-item" onclick="showTab('shopping',this)">
         <span class="nav-icon">⊡</span> Shopping list
       </button>
@@ -607,6 +610,56 @@
       </div>
     </div>
 
+    <!-- Week ahead -->
+    <div id="ahead" class="section">
+      <h2 class="page-title">Week ahead</h2>
+      <p class="page-sub" id="ahead-subtitle">Plan next week, get your shopping list, and build a Sunday prep checklist.</p>
+
+      <div class="card">
+        <span class="label">Next week</span>
+        <div id="ahead-date-range" style="font-size:13px;color:var(--text-2);margin-bottom:1rem;"></div>
+        <textarea id="ahead-wants" placeholder="Anything specific for next week? e.g. 'I've got a busy Thursday', 'want something warming', 'using up sweet potatoes'…" style="min-height:56px;margin-bottom:1rem;"></textarea>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="ahead-gen-btn" onclick="generateAheadWeek()">Plan next week</button>
+          <button class="btn" id="ahead-clear-btn" onclick="clearAheadPlan()">Clear</button>
+        </div>
+      </div>
+
+      <!-- Next week grid -->
+      <div id="ahead-grid-wrap" style="display:none;">
+        <span class="label" style="margin-bottom:10px;">Next week's meals</span>
+        <div class="week-grid" id="ahead-week-grid" style="margin-bottom:1.25rem;"></div>
+
+        <!-- Shopping list for next week -->
+        <div class="card" style="margin-bottom:1rem;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <div>
+              <span class="label" style="margin-bottom:2px;">Shopping list</span>
+              <p style="font-size:13px;color:var(--text-2);">Everything you need for next week.</p>
+            </div>
+            <button class="btn btn-primary" id="ahead-shop-btn" onclick="generateAheadShopping()">Build list</button>
+          </div>
+          <div id="ahead-shop-content" style="margin-top:1rem;display:none;"></div>
+        </div>
+
+        <!-- Prep checklist -->
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+            <div>
+              <span class="label" style="margin-bottom:2px;">Sunday prep checklist</span>
+              <p style="font-size:13px;color:var(--text-2);">What to batch cook, defrost, and prep in advance.</p>
+            </div>
+            <button class="btn btn-primary" id="ahead-prep-btn" onclick="generatePrepChecklist()">Generate checklist</button>
+          </div>
+          <div id="ahead-prep-content" style="margin-top:1rem;display:none;"></div>
+        </div>
+
+        <div style="margin-top:1rem;">
+          <button class="btn" onclick="copyAheadToCurrentWeek()">Copy to this week's plan →</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Profile -->
     <div id="profile" class="section">
       <h2 class="page-title">My profile</h2>
@@ -743,6 +796,10 @@
     <span class="bn-icon">▦</span>
     <span>Plan</span>
   </button>
+  <button class="bottom-nav-item" onclick="showTab('ahead',this)" data-tab="ahead">
+    <span class="bn-icon">▷</span>
+    <span>Next week</span>
+  </button>
   <button class="bottom-nav-item" onclick="showTab('snacks',this)" data-tab="snacks">
     <span class="bn-icon">◈</span>
     <span>Snacks</span>
@@ -750,10 +807,6 @@
   <button class="bottom-nav-item" onclick="showTab('shopping',this)" data-tab="shopping">
     <span class="bn-icon">⊡</span>
     <span>Shopping</span>
-  </button>
-  <button class="bottom-nav-item" onclick="showTab('favourites',this)" data-tab="favourites">
-    <span class="bn-icon">♡</span>
-    <span>Saved</span>
   </button>
   <button class="bottom-nav-item" onclick="showTab('profile',this)" data-tab="profile">
     <span class="bn-icon">◇</span>
@@ -778,6 +831,7 @@
   let shoppingItems = [];
   let favourites = [];
   let snackBank = [];
+  let aheadPlan = {};
   let syncTimer = null;
   let profile = { weight: 146, height: 168, age: 31, goalWeight: null, activity: 1.2, deficit: 500, prefs: { dislikes: '', allergies: '', loves: '', avoidCuisines: '', other: '' } };
   DAYS.forEach(d => weekPlan[d] = []);
@@ -849,6 +903,7 @@
     localStorage.setItem('hmp_shopping', JSON.stringify(shoppingItems));
     localStorage.setItem('hmp_favs', JSON.stringify(favourites));
     localStorage.setItem('hmp_snacks', JSON.stringify(snackBank));
+    localStorage.setItem('hmp_ahead', JSON.stringify(aheadPlan));
     localStorage.setItem('hmp_profile', JSON.stringify(profile));
   }
   function loadLocalState() {
@@ -861,6 +916,8 @@
       if (f) favourites = JSON.parse(f);
       const sn = localStorage.getItem('hmp_snacks');
       if (sn) snackBank = JSON.parse(sn);
+      const ah = localStorage.getItem('hmp_ahead');
+      if (ah) aheadPlan = JSON.parse(ah);
       const pr = localStorage.getItem('hmp_profile');
       if (pr) profile = { ...profile, ...JSON.parse(pr) };
     } catch(e) {}
@@ -904,6 +961,7 @@
       if (record.shoppingItems) shoppingItems = record.shoppingItems;
       if (record.favourites) favourites = record.favourites;
       if (record.snackBank) snackBank = record.snackBank;
+      if (record.aheadPlan) aheadPlan = record.aheadPlan;
       if (record.profile) profile = { ...profile, ...record.profile };
       DAYS.forEach(d => { if (!weekPlan[d]) weekPlan[d] = []; });
       setSyncStatus('ok', 'synced');
@@ -929,7 +987,7 @@
       const res = await fetch(`${JB_BASE}/b/${binId}`, {
         method: 'PUT',
         headers: await jbHeaders(),
-        body: JSON.stringify({ weekPlan, shoppingItems, favourites, snackBank, profile })
+        body: JSON.stringify({ weekPlan, shoppingItems, favourites, snackBank, aheadPlan, profile })
       });
       if (!res.ok) throw new Error(res.status);
       setSyncStatus('ok', 'synced just now');
@@ -1109,6 +1167,7 @@
     if (id === 'shopping') renderShoppingList();
     if (id === 'favourites') renderFavourites();
     if (id === 'snacks') renderSnackBank();
+    if (id === 'ahead') initAheadTab();
   }
 
   function toggleChip(el) { el.classList.toggle('on'); }
@@ -1619,7 +1678,196 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
     el.textContent = raw || 'Could not generate tip — try again.';
   }
 
-  // ── Snack bank ──
+  // ── Week ahead ──
+  function getNextWeekDays() {
+    const today = new Date();
+    const dayOfWeek = (today.getDay() + 6) % 7; // Mon=0
+    const nextMon = new Date(today);
+    nextMon.setDate(today.getDate() + (7 - dayOfWeek));
+    return DAYS.map((_, i) => {
+      const d = new Date(nextMon);
+      d.setDate(nextMon.getDate() + i);
+      return d;
+    });
+  }
+
+  function formatNextWeekLabel(dates) {
+    const opts = { day: 'numeric', month: 'long' };
+    return `${dates[0].toLocaleDateString('en-GB', opts)} – ${dates[6].toLocaleDateString('en-GB', opts)}`;
+  }
+
+  function initAheadTab() {
+    const dates = getNextWeekDays();
+    document.getElementById('ahead-date-range').textContent = formatNextWeekLabel(dates);
+    DAYS.forEach(d => { if (!aheadPlan[d]) aheadPlan[d] = []; });
+    const hasPlan = Object.values(aheadPlan).some(d => d.length > 0);
+    if (hasPlan) {
+      renderAheadGrid();
+      document.getElementById('ahead-grid-wrap').style.display = 'block';
+    }
+  }
+
+  async function generateAheadWeek() {
+    const btn = document.getElementById('ahead-gen-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Planning next week…';
+    const target = getCalorieTarget();
+    const wants = document.getElementById('ahead-wants').value.trim();
+    const favsStr = favourites.length
+      ? `Hannah's favourite meals (try to include some): ${favourites.map(f => f.name).join(', ')}.`
+      : '';
+    const prefsCtx = buildPrefsPromptContext();
+    const dates = getNextWeekDays();
+    const dateLabel = formatNextWeekLabel(dates);
+
+    const prompt = `Create a 7-day weight loss meal plan for Hannah for the week of ${dateLabel}. She is based in the UK. No dietary restrictions unless specified below. 20-40 minute meals. ~${target} calories/day total. Meals should be filling and satisfying. Include breakfast, lunch, and dinner each day. Use varied, interesting recipes with UK ingredient names (grams, ml, °C).
+
+${favsStr}
+${wants ? 'Notes for this week: ' + wants : ''}${prefsCtx}
+
+Return ONLY this JSON (no markdown, no backticks):
+{"Mon":[{"name":"","type":"breakfast","calories":0,"protein":0,"carbs":0,"fat":0,"time":""},{"name":"","type":"lunch","calories":0,"protein":0,"carbs":0,"fat":0,"time":""},{"name":"","type":"dinner","calories":0,"protein":0,"carbs":0,"fat":0,"time":""}],"Tue":[...],"Wed":[...],"Thu":[...],"Fri":[...],"Sat":[...],"Sun":[...]}`;
+
+    const raw = await callClaude(prompt);
+    btn.disabled = false;
+    btn.innerHTML = 'Plan next week';
+    if (!raw) return;
+    try {
+      aheadPlan = JSON.parse(raw.replace(/```json|```/g,'').trim());
+      DAYS.forEach(d => { if (!aheadPlan[d]) aheadPlan[d] = []; });
+      saveState();
+      renderAheadGrid();
+      document.getElementById('ahead-grid-wrap').style.display = 'block';
+      // Reset shopping and prep sections
+      document.getElementById('ahead-shop-content').style.display = 'none';
+      document.getElementById('ahead-prep-content').style.display = 'none';
+    } catch(e) { alert('Generation failed — try again.'); }
+  }
+
+  function renderAheadGrid() {
+    const grid = document.getElementById('ahead-week-grid');
+    if (!grid) return;
+    const dates = getNextWeekDays();
+    grid.innerHTML = DAYS.map((d, i) => {
+      const meals = aheadPlan[d] || [];
+      const totalCal = meals.reduce((s,m) => s + (m.calories||0), 0);
+      const dateNum = dates[i].getDate();
+      const mon = dates[i].toLocaleDateString('en-GB', { month: 'short' });
+      return `<div class="day-col">
+        <div class="day-label">${d}</div>
+        <div style="font-size:10px;color:var(--text-3);margin-bottom:5px;">${dateNum} ${mon}</div>
+        ${meals.length
+          ? meals.map(m => `<div class="day-meal" title="${m.type} · ${m.calories} kcal"
+              onclick="getRecipe('${encodeURIComponent(m.name)}','${m.calories}')">${m.name}</div>`).join('')
+          : '<div class="day-meal empty">empty</div>'}
+        ${totalCal ? `<div class="day-cals">${totalCal} kcal</div>` : ''}
+      </div>`;
+    }).join('');
+  }
+
+  function clearAheadPlan() {
+    if (!confirm('Clear next week\'s plan?')) return;
+    DAYS.forEach(d => aheadPlan[d] = []);
+    saveState();
+    document.getElementById('ahead-grid-wrap').style.display = 'none';
+    document.getElementById('ahead-shop-content').style.display = 'none';
+    document.getElementById('ahead-prep-content').style.display = 'none';
+  }
+
+  async function generateAheadShopping() {
+    const btn = document.getElementById('ahead-shop-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Building list…';
+    const prompt = `Based on this 7-day meal plan, generate a shopping list grouped by supermarket category (Produce, Protein, Dairy & Eggs, Grains & Bread, Tins & Pantry, Condiments & Spices). Use UK quantities (grams, ml). Plan: ${JSON.stringify(aheadPlan)}. Return ONLY JSON (no backticks): {"categories":[{"name":"","items":[{"item":"","qty":""}]}]}`;
+    const raw = await callClaude(prompt);
+    btn.disabled = false;
+    btn.innerHTML = 'Build list';
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+      renderAheadShoppingList(parsed.categories);
+    } catch(e) { alert('Failed to build list — try again.'); }
+  }
+
+  function renderAheadShoppingList(categories) {
+    const el = document.getElementById('ahead-shop-content');
+    el.innerHTML = categories.map((cat, ci) => `
+      <div class="shop-category">${cat.name}</div>
+      ${cat.items.map((it, i) => `
+        <div class="shop-item" id="ash-${ci}-${i}">
+          <input type="checkbox" onchange="toggleAheadShopItem('ash-${ci}-${i}',this)" />
+          <span>${it.item}</span>
+          <span class="qty">${it.qty}</span>
+        </div>
+      `).join('')}
+    `).join('');
+    el.style.display = 'block';
+  }
+
+  function toggleAheadShopItem(id, cb) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('checked', cb.checked);
+  }
+
+  async function generatePrepChecklist() {
+    const btn = document.getElementById('ahead-prep-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Building checklist…';
+    const dates = getNextWeekDays();
+    const prompt = `Hannah has planned the following meals for the week of ${formatNextWeekLabel(dates)}:
+
+${JSON.stringify(aheadPlan)}
+
+Create a practical Sunday prep checklist for her. Include:
+- Things to batch cook on Sunday (e.g. grains, proteins, roasted veg)
+- Things to defrost the night before on specific days
+- Any advance prep that saves time during the week (e.g. marinating, chopping)
+- Any tips for making the week easier
+
+Keep it friendly, specific to her actual meal plan, and organised by task type. Use UK cooking terms and measurements.
+
+Return ONLY JSON (no backticks):
+{"sections":[{"title":"string","tasks":["string"]}]}`;
+
+    const raw = await callClaude(prompt);
+    btn.disabled = false;
+    btn.innerHTML = 'Generate checklist';
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+      renderPrepChecklist(parsed.sections);
+    } catch(e) { alert('Failed to generate checklist — try again.'); }
+  }
+
+  function renderPrepChecklist(sections) {
+    const el = document.getElementById('ahead-prep-content');
+    el.innerHTML = sections.map(sec => `
+      <div style="margin-bottom:1rem;">
+        <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:6px;">${sec.title}</div>
+        ${sec.tasks.map((t, i) => `
+          <div class="shop-item" id="prep-${sec.title.replace(/\s/g,'')}-${i}">
+            <input type="checkbox" onchange="togglePrepItem('prep-${sec.title.replace(/\s/g,'')}-${i}',this)" />
+            <span style="font-size:13px;">${t}</span>
+          </div>
+        `).join('')}
+      </div>
+    `).join('');
+    el.style.display = 'block';
+  }
+
+  function togglePrepItem(id, cb) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('checked', cb.checked);
+  }
+
+  function copyAheadToCurrentWeek() {
+    if (!confirm('Copy next week\'s plan to this week? This will replace your current weekly plan.')) return;
+    DAYS.forEach(d => { weekPlan[d] = (aheadPlan[d] || []).map(m => ({ ...m, pinned: false })); });
+    saveState();
+    renderWeekGrid();
+    alert('Copied! Your weekly plan has been updated.');
+  }
+</script>
   async function getSnackSuggestions() {
     const btn = document.getElementById('snack-suggest-btn');
     btn.disabled = true;
