@@ -1411,11 +1411,15 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
           </div>
           <div class="fav-actions">
             <button class="btn" style="font-size:12px;padding:6px 10px;" onclick='addMealToPlan(${JSON.stringify(m)})'>+ Plan</button>
-            <button class="btn" style="font-size:12px;padding:6px 10px;" onclick="getRecipe('${encodeURIComponent(m.name)}','${m.calories}')">Recipe</button>
+            <button class="btn fav-recipe-btn" style="font-size:12px;padding:6px 10px;" data-name="${encodeURIComponent(m.name)}" data-cal="${m.calories}">Recipe</button>
             <button class="heart-btn active" data-name="${m.name}" onclick='toggleFavourite(${JSON.stringify(m)})' title="Remove from favourites">♥</button>
           </div>
         </div>
       `).join('') + '</div>';
+    // Attach recipe handlers via JS to avoid apostrophe issues
+    el.querySelectorAll('.fav-recipe-btn').forEach(btn => {
+      btn.addEventListener('click', () => getRecipe(btn.dataset.name, btn.dataset.cal));
+    });
   }
 
   // ── Meal suggestion rendering (with heart button) ──
@@ -1604,7 +1608,7 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
     document.getElementById('as-title').textContent = meal.name;
     document.getElementById('as-sub').textContent = `${meal.type} · ${meal.calories} kcal · ${meal.time}`;
     document.getElementById('as-btns').innerHTML = `
-      <button class="action-sheet-btn" onclick="getRecipe('${encodeURIComponent(meal.name)}','${meal.calories}');closeActionSheet()">
+      <button class="action-sheet-btn" id="as-recipe-btn">
         <span class="as-icon">📖</span> View recipe
       </button>
       <button class="action-sheet-btn" onclick="asPin();closeActionSheet()">
@@ -1620,6 +1624,11 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
         <span class="as-icon">×</span> Remove from plan
       </button>
     `;
+    // Attach recipe handler via JS (avoids apostrophe/quote issues in onclick attributes)
+    document.getElementById('as-recipe-btn').addEventListener('click', () => {
+      getRecipe(encodeURIComponent(meal.name), meal.calories);
+      closeActionSheet();
+    });
     document.getElementById('action-sheet').style.display = 'flex';
   }
 
