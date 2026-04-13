@@ -472,7 +472,7 @@
     <!-- Week plan -->
     <div id="week" class="section">
       <h2 class="page-title">Weekly plan</h2>
-      <p class="page-sub">Your meals for the week. Swap any meal, or click it for the recipe.</p>
+      <p class="page-sub">Your meals for the week. Swap any meal, or tap it for options. <span id="week-plan-stamp" style="color:var(--text-3);"></span></p>
 
       <div class="card" id="smart-planner-card" style="display:none;">
         <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
@@ -832,8 +832,68 @@
   let favourites = [];
   let snackBank = [];
   let aheadPlan = {};
+  let weekPlanMeta = { weekStartDate: null, generatedAt: null };
   let syncTimer = null;
+
+  // ── Week date helpers ──
+  function getCurrentWeekMonday() {
+    const today = new Date();
+    const day = (today.getDay() + 6) % 7; // Mon=0
+    const mon = new Date(today);
+    mon.setDate(today.getDate() - day);
+    return mon.toISOString().slice(0, 10);
+  }
+  function formatWeekOf(isoDate) {
+    if (!isoDate) return '';
+    const d = new Date(isoDate + 'T12:00:00');
+    return 'w/c ' + d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+  }
+  function isSameWeek(isoDate) {
+    return isoDate === getCurrentWeekMonday();
+  }
   let profile = { weight: 146, height: 168, age: 31, goalWeight: null, activity: 1.2, deficit: 500, prefs: { dislikes: '', allergies: '', loves: '', avoidCuisines: '', other: '' } };
+
+  // ── Pre-populated plan for w/c 14 April 2025 ──
+  // Only used as a seed if no saved plan exists
+  const SEEDED_PLAN = {
+    Mon: [
+      { name: 'Cottage Cheese and Blueberry Jam Bagel', type: 'breakfast', calories: 380, protein: 18, carbs: 52, fat: 9, time: '10 mins', pinned: false },
+      { name: 'Greek Chicken and Rice Bowl', type: 'lunch', calories: 520, protein: 38, carbs: 48, fat: 12, time: '25 mins', pinned: false },
+      { name: 'Beef Mince and Sweet Potato Shepherd\'s Pie', type: 'dinner', calories: 625, protein: 42, carbs: 58, fat: 18, time: '40 mins', pinned: false }
+    ],
+    Tue: [
+      { name: 'Scrambled Eggs on Wholemeal Toast with Grilled Tomatoes', type: 'breakfast', calories: 340, protein: 22, carbs: 32, fat: 13, time: '15 mins', pinned: false },
+      { name: 'Turkey and Avocado Wrap with Crisps', type: 'lunch', calories: 480, protein: 30, carbs: 42, fat: 16, time: '10 mins', pinned: false },
+      { name: 'Chicken Tikka Masala with Basmati Rice', type: 'dinner', calories: 760, protein: 48, carbs: 72, fat: 22, time: '35 mins', pinned: false }
+    ],
+    Wed: [
+      { name: 'Porridge with Banana and Honey', type: 'breakfast', calories: 320, protein: 10, carbs: 62, fat: 5, time: '10 mins', pinned: false },
+      { name: 'Chicken Caesar Salad with Croutons', type: 'lunch', calories: 420, protein: 34, carbs: 22, fat: 18, time: '15 mins', pinned: false },
+      { name: 'Slow Cooker Chicken and Vegetable Casserole (Double Portion)', type: 'dinner', calories: 655, protein: 52, carbs: 44, fat: 14, time: '20 mins', pinned: false }
+    ],
+    Thu: [
+      { name: 'Greek Yoghurt with Granola and Berries', type: 'breakfast', calories: 320, protein: 14, carbs: 48, fat: 8, time: '5 mins', pinned: false },
+      { name: 'Leftover Chicken and Vegetable Casserole', type: 'lunch', calories: 380, protein: 32, carbs: 28, fat: 10, time: '5 mins', pinned: false },
+      { name: 'Leftover Chicken and Vegetable Casserole', type: 'dinner', calories: 380, protein: 32, carbs: 28, fat: 10, time: '5 mins', pinned: false }
+    ],
+    Fri: [
+      { name: 'Cottage Cheese and Blueberry Jam Bagel', type: 'breakfast', calories: 380, protein: 18, carbs: 52, fat: 9, time: '10 mins', pinned: false },
+      { name: 'Ham and Cheese Toast with Side Salad', type: 'lunch', calories: 420, protein: 24, carbs: 38, fat: 14, time: '10 mins', pinned: false },
+      { name: 'Spaghetti Bolognese with Garlic Bread', type: 'dinner', calories: 825, protein: 44, carbs: 88, fat: 24, time: '35 mins', pinned: false }
+    ],
+    Sat: [
+      { name: 'Full English Breakfast (2 eggs, 2 bacon, beans, toast)', type: 'breakfast', calories: 680, protein: 38, carbs: 52, fat: 28, time: '20 mins', pinned: false },
+      { name: 'Jacket Potato with Cheese and Beans', type: 'lunch', calories: 520, protein: 22, carbs: 72, fat: 14, time: '15 mins', pinned: false },
+      { name: 'Roast Chicken Dinner with Roasted Vegetables', type: 'dinner', calories: 550, protein: 48, carbs: 38, fat: 16, time: '40 mins', pinned: false }
+    ],
+    Sun: [
+      { name: 'Pancakes with Maple Syrup and Bacon', type: 'breakfast', calories: 520, protein: 18, carbs: 62, fat: 18, time: '20 mins', pinned: false },
+      { name: 'Chicken and Bacon Sandwich with Crisps', type: 'lunch', calories: 480, protein: 28, carbs: 42, fat: 16, time: '10 mins', pinned: false },
+      { name: 'Beef Stir Fry with Noodles', type: 'dinner', calories: 595, protein: 38, carbs: 58, fat: 18, time: '25 mins', pinned: false }
+    ]
+  };
+  const SEEDED_WEEK = '2026-04-13';
+
   DAYS.forEach(d => weekPlan[d] = []);
 
   // ── Calorie calculation (Mifflin-St Jeor for women) ──
@@ -883,6 +943,13 @@
       loadFromJSONBin();
     } else {
       loadLocalState();
+      // Seed plan if nothing saved yet
+      const hasAnyMeals = Object.values(weekPlan).some(d => d.length > 0);
+      if (!hasAnyMeals) {
+        weekPlan = { ...SEEDED_PLAN };
+        weekPlanMeta = { weekStartDate: SEEDED_WEEK, generatedAt: new Date().toISOString() };
+        saveLocalState();
+      }
       renderWeekGrid();
       renderFavourites();
       renderTracker();
@@ -900,6 +967,7 @@
   // ── Local fallback ──
   function saveLocalState() {
     localStorage.setItem('hmp_plan', JSON.stringify(weekPlan));
+    localStorage.setItem('hmp_plan_meta', JSON.stringify(weekPlanMeta));
     localStorage.setItem('hmp_shopping', JSON.stringify(shoppingItems));
     localStorage.setItem('hmp_favs', JSON.stringify(favourites));
     localStorage.setItem('hmp_snacks', JSON.stringify(snackBank));
@@ -910,6 +978,8 @@
     try {
       const p = localStorage.getItem('hmp_plan');
       if (p) weekPlan = JSON.parse(p);
+      const pm = localStorage.getItem('hmp_plan_meta');
+      if (pm) weekPlanMeta = JSON.parse(pm);
       const s = localStorage.getItem('hmp_shopping');
       if (s) shoppingItems = JSON.parse(s);
       const f = localStorage.getItem('hmp_favs');
@@ -958,12 +1028,19 @@
       const data = await res.json();
       const record = data.record;
       if (record.weekPlan) weekPlan = record.weekPlan;
+      if (record.weekPlanMeta) weekPlanMeta = record.weekPlanMeta;
       if (record.shoppingItems) shoppingItems = record.shoppingItems;
       if (record.favourites) favourites = record.favourites;
       if (record.snackBank) snackBank = record.snackBank;
       if (record.aheadPlan) aheadPlan = record.aheadPlan;
       if (record.profile) profile = { ...profile, ...record.profile };
       DAYS.forEach(d => { if (!weekPlan[d]) weekPlan[d] = []; });
+      // Seed if bin had no meals
+      const hasAnyMeals = Object.values(weekPlan).some(d => d.length > 0);
+      if (!hasAnyMeals) {
+        weekPlan = { ...SEEDED_PLAN };
+        weekPlanMeta = { weekStartDate: SEEDED_WEEK, generatedAt: new Date().toISOString() };
+      }
       setSyncStatus('ok', 'synced');
     } catch(e) {
       setSyncStatus('err', 'load failed — using local');
@@ -987,7 +1064,7 @@
       const res = await fetch(`${JB_BASE}/b/${binId}`, {
         method: 'PUT',
         headers: await jbHeaders(),
-        body: JSON.stringify({ weekPlan, shoppingItems, favourites, snackBank, aheadPlan, profile })
+        body: JSON.stringify({ weekPlan, weekPlanMeta, shoppingItems, favourites, snackBank, aheadPlan, profile })
       });
       if (!res.ok) throw new Error(res.status);
       setSyncStatus('ok', 'synced just now');
@@ -1444,6 +1521,7 @@ Return ONLY this JSON (no markdown, no backticks):
           weekPlan[d] = aiDay;
         }
       });
+      weekPlanMeta = { weekStartDate: getCurrentWeekMonday(), generatedAt: new Date().toISOString() };
       saveState();
       renderWeekGrid();
       renderTracker();
@@ -1541,6 +1619,18 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
   function renderWeekGrid() {
     const grid = document.getElementById('week-grid');
     if (!grid) return;
+    // Update week stamp
+    const stamp = document.getElementById('week-plan-stamp');
+    if (stamp) {
+      if (weekPlanMeta.weekStartDate) {
+        const sameWeek = isSameWeek(weekPlanMeta.weekStartDate);
+        const label = formatWeekOf(weekPlanMeta.weekStartDate);
+        stamp.textContent = sameWeek ? `(${label})` : `(plan from ${label} — consider regenerating)`;
+        stamp.style.color = sameWeek ? 'var(--text-3)' : 'var(--amber)';
+      } else {
+        stamp.textContent = '';
+      }
+    }
     grid.innerHTML = DAYS.map(d => {
       const meals = weekPlan[d] || [];
       const totalCal = meals.reduce((s,m) => s + (m.calories||0), 0);
