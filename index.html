@@ -1259,14 +1259,25 @@
       messages: [{ role: 'user', content: prompt }]
     };
     if (systemPrompt) body.system = systemPrompt;
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) { const err = await res.json(); alert('API error: ' + (err.error?.message || res.status)); return null; }
-    const data = await res.json();
-    return data.content.map(b => b.text || '').join('');
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const msg = (err.error?.message || '').toLowerCase();
+        if (res.status === 529 || msg.includes('overload')) return '__OVERLOADED__';
+        if (res.status === 429 || msg.includes('rate')) return '__RATE_LIMITED__';
+        if (res.status === 401) return '__AUTH_ERROR__';
+        return '__ERROR__';
+      }
+      const data = await res.json();
+      return data.content.map(b => b.text || '').join('');
+    } catch(e) {
+      return '__NETWORK_ERROR__';
+    }
   }
 
   // ── Suggestions ──
@@ -1291,7 +1302,7 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Get meal ideas';
-    if (!raw) return;
+    if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
       renderSuggestions(parsed.meals);
@@ -1307,7 +1318,7 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
     try {
       // Try both possible key names from the smart planner
       const raw = localStorage.getItem('smartplanner_week') || localStorage.getItem('planner_week_summary');
-      if (!raw) return;
+      if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
       const data = JSON.parse(raw);
       displaySmartPlannerSummary(data);
     } catch(e) {}
@@ -1320,7 +1331,7 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
   function getSmartPlannerContext() {
     try {
       const raw = localStorage.getItem('smartplanner_week') || localStorage.getItem('planner_week_summary');
-      if (!raw) return null;
+      if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return null; }
       return JSON.parse(raw);
     } catch(e) { return null; }
   }
@@ -1440,7 +1451,6 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
 
   async function getRecipe(encodedName, calories) {
     const name = decodeURIComponent(encodedName);
-    // Show modal immediately with loading state
     document.getElementById('recipe-modal-title').textContent = name;
     const content = document.getElementById('recipe-modal-content');
     content.textContent = 'Loading recipe…';
@@ -1449,9 +1459,25 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
     document.body.style.overflow = 'hidden';
 
     const key = getAnthropicKey();
-    if (!key) { content.textContent = 'No API key found — add it in the setup banner.'; content.className = ''; return; }
+    if (!key) {
+      content.textContent = 'No API key found — add it in the setup banner.';
+      content.className = '';
+      return;
+    }
     const raw = await callClaude(`Write a clear, easy recipe for: ${name}. About ${calories} calories. Under 40 minutes. Weight-loss focused, UK ingredients and measurements (grams, ml, °C). Include a short ingredients list then numbered step-by-step instructions. Keep it friendly and practical.`);
-    content.textContent = raw || 'Could not load recipe — try again.';
+
+    if (!raw || raw.startsWith('__')) {
+      let msg = 'Something went wrong loading the recipe.';
+      if (raw === '__OVERLOADED__') msg = "Anthropic's servers are a bit busy right now — this happens occasionally. Wait a moment and tap Retry.";
+      else if (raw === '__RATE_LIMITED__') msg = 'Too many requests sent — wait a minute then tap Retry.';
+      else if (raw === '__AUTH_ERROR__') msg = 'API key issue — double-check your key in the setup banner.';
+      else if (raw === '__NETWORK_ERROR__') msg = 'No internet connection — check your signal then tap Retry.';
+      content.innerHTML = `<span style="color:var(--coral);font-style:normal;">${msg}</span><br><br>` +
+        `<button class="btn btn-primary" style="font-size:13px;" onclick="getRecipe('${encodedName}','${calories}')">Retry</button>`;
+      content.className = '';
+      return;
+    }
+    content.textContent = raw;
     content.className = '';
   }
 
@@ -1499,7 +1525,7 @@ Return ONLY this JSON (no markdown, no backticks):
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Auto-generate full week';
-    if (!raw) return;
+    if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
       // Merge: keep pinned meals from existing plan, fill rest from AI response
@@ -1679,7 +1705,7 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Generate with AI';
-    if (!raw) return;
+    if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
       shoppingItems = parsed.categories;
@@ -1821,7 +1847,7 @@ Return ONLY this JSON (no markdown, no backticks):
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Plan next week';
-    if (!raw) return;
+    if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
     try {
       aheadPlan = JSON.parse(raw.replace(/```json|```/g,'').trim());
       DAYS.forEach(d => { if (!aheadPlan[d]) aheadPlan[d] = []; });
@@ -1872,7 +1898,7 @@ Return ONLY this JSON (no markdown, no backticks):
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Build list';
-    if (!raw) return;
+    if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
       renderAheadShoppingList(parsed.categories);
@@ -1922,7 +1948,7 @@ Return ONLY JSON (no backticks):
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Generate checklist';
-    if (!raw) return;
+    if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
       renderPrepChecklist(parsed.sections);
@@ -1960,6 +1986,7 @@ Return ONLY JSON (no backticks):
 
   // ── Snack bank ──
   async function getSnackSuggestions() {
+    const btn = document.getElementById('snack-suggest-btn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Finding snacks…';
 
@@ -1985,12 +2012,21 @@ Return ONLY this JSON (no markdown, no backticks):
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Suggest snacks';
-    if (!raw) return;
+
+    if (!raw || raw.startsWith('__')) {
+      let msg = 'Couldn\'t load suggestions — try again.';
+      if (raw === '__OVERLOADED__') msg = 'Anthropic\'s servers are a bit busy — wait a moment and try again.';
+      else if (raw === '__RATE_LIMITED__') msg = 'Too many requests — wait a minute and try again.';
+      else if (raw === '__NETWORK_ERROR__') msg = 'No internet connection — check your signal and try again.';
+      document.getElementById('snack-suggest-results').innerHTML = `<p style="color:var(--coral);font-size:14px;">${msg}</p>`;
+      document.getElementById('snack-suggest-output').style.display = 'block';
+      return;
+    }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
       renderSnackSuggestions(parsed.snacks);
     } catch(e) {
-      document.getElementById('snack-suggest-results').innerHTML = '<p style="color:var(--text-2);font-size:14px;">Couldn\'t load suggestions — try again.</p>';
+      document.getElementById('snack-suggest-results').innerHTML = '<p style="color:var(--text-2);font-size:14px;">Couldn\'t parse suggestions — try again.</p>';
       document.getElementById('snack-suggest-output').style.display = 'block';
     }
   }
