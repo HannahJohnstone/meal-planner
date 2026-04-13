@@ -1302,7 +1302,11 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Get meal ideas';
-    if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
+    if (!raw || raw.startsWith('__')) {
+        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
+        else if (raw) alert("Something went wrong — please try again.");
+        return;
+      }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
       renderSuggestions(parsed.meals);
@@ -1318,7 +1322,11 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
     try {
       // Try both possible key names from the smart planner
       const raw = localStorage.getItem('smartplanner_week') || localStorage.getItem('planner_week_summary');
-      if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
+      if (!raw || raw.startsWith('__')) {
+        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
+        else if (raw) alert("Something went wrong — please try again.");
+        return;
+      }
       const data = JSON.parse(raw);
       displaySmartPlannerSummary(data);
     } catch(e) {}
@@ -1331,7 +1339,11 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
   function getSmartPlannerContext() {
     try {
       const raw = localStorage.getItem('smartplanner_week') || localStorage.getItem('planner_week_summary');
-      if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return null; }
+      if (!raw || raw.startsWith('__')) {
+        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
+        else if (raw) alert("Something went wrong — please try again.");
+        return null;
+      }
       return JSON.parse(raw);
     } catch(e) { return null; }
   }
@@ -1525,7 +1537,11 @@ Return ONLY this JSON (no markdown, no backticks):
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Auto-generate full week';
-    if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
+    if (!raw || raw.startsWith('__')) {
+        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
+        else if (raw) alert("Something went wrong — please try again.");
+        return;
+      }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
       // Merge: keep pinned meals from existing plan, fill rest from AI response
@@ -1705,7 +1721,11 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Generate with AI';
-    if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
+    if (!raw || raw.startsWith('__')) {
+        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
+        else if (raw) alert("Something went wrong — please try again.");
+        return;
+      }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
       shoppingItems = parsed.categories;
@@ -1847,7 +1867,11 @@ Return ONLY this JSON (no markdown, no backticks):
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Plan next week';
-    if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
+    if (!raw || raw.startsWith('__')) {
+        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
+        else if (raw) alert("Something went wrong — please try again.");
+        return;
+      }
     try {
       aheadPlan = JSON.parse(raw.replace(/```json|```/g,'').trim());
       DAYS.forEach(d => { if (!aheadPlan[d]) aheadPlan[d] = []; });
@@ -1898,7 +1922,11 @@ Return ONLY this JSON (no markdown, no backticks):
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Build list';
-    if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
+    if (!raw || raw.startsWith('__')) {
+        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
+        else if (raw) alert("Something went wrong — please try again.");
+        return;
+      }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
       renderAheadShoppingList(parsed.categories);
@@ -1948,7 +1976,11 @@ Return ONLY JSON (no backticks):
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Generate checklist';
-    if (!raw || raw.startsWith('__')) { if (raw === '__OVERLOADED__') alert('Anthropic's servers are busy — wait a moment and try again.'); else if (raw) alert('Something went wrong — please try again.'); return; }
+    if (!raw || raw.startsWith('__')) {
+        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
+        else if (raw) alert("Something went wrong — please try again.");
+        return;
+      }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
       renderPrepChecklist(parsed.sections);
