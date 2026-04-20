@@ -1033,7 +1033,7 @@
       if (record.favourites) favourites = record.favourites;
       if (record.snackBank) snackBank = record.snackBank;
       if (record.aheadPlan) aheadPlan = record.aheadPlan;
-      if (record.profile) profile = { ...profile, ...record.profile };
+      if (record.profile) profile = { ...profile, ...record.profile, prefs: { ...profile.prefs, ...(record.profile.prefs || {}) } };
       DAYS.forEach(d => { if (!weekPlan[d]) weekPlan[d] = []; });
       // Seed if bin had no meals
       const hasAnyMeals = Object.values(weekPlan).some(d => d.length > 0);
@@ -1092,7 +1092,11 @@
   function loadProfile() {
     try {
       const p = localStorage.getItem('hmp_profile');
-      if (p) profile = { ...profile, ...JSON.parse(p) };
+      if (p) {
+        const saved = JSON.parse(p);
+        // Deep merge prefs so they're never wiped by a shallow merge
+        profile = { ...profile, ...saved, prefs: { ...profile.prefs, ...(saved.prefs || {}) } };
+      }
     } catch(e) {}
   }
 
@@ -1143,12 +1147,12 @@
   function buildPrefsPromptContext() {
     const pr = profile.prefs || {};
     const parts = [];
-    if (pr.allergies) parts.push(`ALLERGIES/INTOLERANCES (never include): ${pr.allergies}`);
-    if (pr.dislikes) parts.push(`Foods she dislikes (avoid): ${pr.dislikes}`);
+    if (pr.allergies) parts.push(`NEVER include (allergies/intolerances — strict): ${pr.allergies}`);
+    if (pr.dislikes) parts.push(`NEVER suggest (dislikes — strict): ${pr.dislikes}`);
     if (pr.loves) parts.push(`Cuisines she enjoys: ${pr.loves}`);
     if (pr.avoidCuisines) parts.push(`Cuisines/styles to avoid: ${pr.avoidCuisines}`);
     if (pr.other) parts.push(pr.other);
-    return parts.length ? '\n\nFood preferences:\n' + parts.join('\n') : '';
+    return parts.length ? '\n' + parts.join('\n') : '';
   }
 
   function updatePrefsPreview() {
@@ -1290,13 +1294,22 @@
     const typeStr = mealType ? `Focus on ${mealType} meals only.` : 'Mix of breakfast, lunch, and dinner.';
     const target = getCalorieTarget();
     const prefsCtx = buildPrefsPromptContext();
+
+    // Build list of meals already in the plan this week to avoid repetition
+    const planMeals = Object.values(weekPlan).flat().map(m => m.name).filter(Boolean);
+    const recentStr = planMeals.length
+      ? `\n\nMeals already in this week's plan — DO NOT suggest these or anything very similar: ${planMeals.join(', ')}.`
+      : '';
+
     const prompt = `You are a weight loss meal planner for Hannah, who is based in the UK. She has no dietary restrictions unless specified below. She wants meals under 40 minutes, targets ~${target} calories/day, and struggles with appetite (needs filling meals), variety, and planning. Use UK ingredient names and supermarket-friendly portions (e.g. rashers not strips, courgette not zucchini, chips not fries where relevant, grams not ounces).
+
+IMPORTANT — strictly follow these preference rules:${prefsCtx || ' No specific preferences set.'}${recentStr}
 
 ${typeStr}
 Mood/preferences today: ${mood || 'no preference'}
-${extra ? 'Extra info: ' + extra : ''}${prefsCtx}
+${extra ? 'Extra info: ' + extra : ''}
 
-Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
+Suggest exactly 3 meals that are DIFFERENT from anything already in the plan. Return ONLY this JSON (no markdown, no backticks):
 {"meals":[{"name":"string","type":"breakfast|lunch|dinner","calories":0,"protein":0,"carbs":0,"fat":0,"time":"string","tags":["string"],"why":"one sentence why this suits Hannah today","ingredients":["string"]}]}`;
 
     const raw = await callClaude(prompt);
@@ -1317,16 +1330,10 @@ Suggest exactly 3 meals. Return ONLY this JSON (no markdown, no backticks):
   }
 
   // ── Smart planner integration ──
-  // Reads the shared localStorage key written by the smart planner app
   function loadSmartPlannerData() {
     try {
-      // Try both possible key names from the smart planner
       const raw = localStorage.getItem('smartplanner_week') || localStorage.getItem('planner_week_summary');
-      if (!raw || raw.startsWith('__')) {
-        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
-        else if (raw) alert("Something went wrong — please try again.");
-        return;
-      }
+      if (!raw) return;
       const data = JSON.parse(raw);
       displaySmartPlannerSummary(data);
     } catch(e) {}
