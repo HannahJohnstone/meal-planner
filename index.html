@@ -404,6 +404,9 @@
       <button class="nav-item" onclick="showTab('snacks',this)">
         <span class="nav-icon">◈</span> Snack bank
       </button>
+      <button class="nav-item" onclick="showTab('lowspoon',this)">
+        <span class="nav-icon">🌿</span> Low spoon meals
+      </button>
       <button class="nav-item" onclick="showTab('profile',this)">
         <span class="nav-icon">◇</span> My profile
       </button>
@@ -457,9 +460,9 @@
         <textarea id="extra-input" placeholder="Anything in the fridge? Not much time? Particularly hungry today? Tell me anything…"></textarea>
         <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
           <button class="btn btn-primary" id="suggest-btn" onclick="getSuggestions()">Get meal ideas</button>
-          <button class="btn" onclick="getSuggestions('breakfast')">Breakfast ideas</button>
           <button class="btn" onclick="getSuggestions('lunch')">Lunch ideas</button>
           <button class="btn" onclick="getSuggestions('dinner')">Dinner ideas</button>
+          <button class="btn" onclick="getSuggestions('snack')">Snack ideas</button>
         </div>
       </div>
 
@@ -660,6 +663,26 @@
       </div>
     </div>
 
+    <!-- Low Spoon Meals -->
+    <div id="lowspoon" class="section">
+      <h2 class="page-title">Low spoon meals</h2>
+      <p class="page-sub">Easy, nourishing meals for when energy is low. No complicated prep, gentle on the stomach.</p>
+
+      <div id="lowspoon-bank-section">
+        <div id="lowspoon-content"></div>
+      </div>
+
+      <div class="card" style="margin-top:1rem;">
+        <span class="label">Get AI suggestions</span>
+        <textarea id="lowspoon-notes" placeholder="How are you feeling? e.g. 'really tired today', 'stomach is unsettled', 'need something warm and comforting'…" style="min-height:56px;margin-bottom:1rem;"></textarea>
+        <button class="btn btn-primary" id="lowspoon-suggest-btn" onclick="getLowSpoonSuggestions()">Suggest low spoon meals</button>
+      </div>
+      <div id="lowspoon-suggest-output" style="display:none;margin-top:1rem;">
+        <span class="label">Suggestions</span>
+        <div id="lowspoon-suggest-results"></div>
+      </div>
+    </div>
+
     <!-- Profile -->
     <div id="profile" class="section">
       <h2 class="page-title">My profile</h2>
@@ -800,9 +823,9 @@
     <span class="bn-icon">▷</span>
     <span>Next week</span>
   </button>
-  <button class="bottom-nav-item" onclick="showTab('snacks',this)" data-tab="snacks">
-    <span class="bn-icon">◈</span>
-    <span>Snacks</span>
+  <button class="bottom-nav-item" onclick="showTab('lowspoon',this)" data-tab="lowspoon">
+    <span class="bn-icon">🌿</span>
+    <span>Low spoon</span>
   </button>
   <button class="bottom-nav-item" onclick="showTab('shopping',this)" data-tab="shopping">
     <span class="bn-icon">⊡</span>
@@ -830,15 +853,20 @@
   let weekPlan = {};
   let shoppingItems = [];
   let favourites = [];
-  let snackBank = [];
+  let lowSpoonBank = [];   // replaces snackBank
+  let snackBank = [];      // kept for snack browsing
   let aheadPlan = {};
   let weekPlanMeta = { weekStartDate: null, generatedAt: null };
+  let suggestionHistory = []; // tracks recently suggested meal names to avoid repetition
   let syncTimer = null;
+
+  // Prefs stored SEPARATELY from profile to avoid merge bugs
+  let prefs = { dislikes: '', allergies: '', loves: '', avoidCuisines: '', other: '' };
 
   // ── Week date helpers ──
   function getCurrentWeekMonday() {
     const today = new Date();
-    const day = (today.getDay() + 6) % 7; // Mon=0
+    const day = (today.getDay() + 6) % 7;
     const mon = new Date(today);
     mon.setDate(today.getDate() - day);
     return mon.toISOString().slice(0, 10);
@@ -848,51 +876,49 @@
     const d = new Date(isoDate + 'T12:00:00');
     return 'w/c ' + d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
   }
-  function isSameWeek(isoDate) {
-    return isoDate === getCurrentWeekMonday();
-  }
-  let profile = { weight: 146, height: 168, age: 31, goalWeight: null, activity: 1.2, deficit: 500, prefs: { dislikes: '', allergies: '', loves: '', avoidCuisines: '', other: '' } };
+  function isSameWeek(isoDate) { return isoDate === getCurrentWeekMonday(); }
 
-  // ── Pre-populated plan for w/c 14 April 2025 ──
-  // Only used as a seed if no saved plan exists
+  let profile = { weight: 146, height: 168, age: 31, goalWeight: null, activity: 1.2, deficit: 500 };
+
+  // ── Pre-populated plan for w/c 14 April 2026 ──
   const SEEDED_PLAN = {
     Mon: [
-      { name: 'Cottage Cheese and Blueberry Jam Bagel', type: 'breakfast', calories: 380, protein: 18, carbs: 52, fat: 9, time: '10 mins', pinned: false },
       { name: 'Greek Chicken and Rice Bowl', type: 'lunch', calories: 520, protein: 38, carbs: 48, fat: 12, time: '25 mins', pinned: false },
-      { name: 'Beef Mince and Sweet Potato Shepherd\'s Pie', type: 'dinner', calories: 625, protein: 42, carbs: 58, fat: 18, time: '40 mins', pinned: false }
+      { name: 'Beef Mince and Sweet Potato Shepherd\'s Pie', type: 'dinner', calories: 625, protein: 42, carbs: 58, fat: 18, time: '40 mins', pinned: false },
+      { name: 'Apple and Peanut Butter', type: 'snack', calories: 200, protein: 5, carbs: 22, fat: 10, time: '2 mins', pinned: false }
     ],
     Tue: [
-      { name: 'Scrambled Eggs on Wholemeal Toast with Grilled Tomatoes', type: 'breakfast', calories: 340, protein: 22, carbs: 32, fat: 13, time: '15 mins', pinned: false },
       { name: 'Turkey and Avocado Wrap with Crisps', type: 'lunch', calories: 480, protein: 30, carbs: 42, fat: 16, time: '10 mins', pinned: false },
-      { name: 'Chicken Tikka Masala with Basmati Rice', type: 'dinner', calories: 760, protein: 48, carbs: 72, fat: 22, time: '35 mins', pinned: false }
+      { name: 'Chicken Tikka Masala with Basmati Rice', type: 'dinner', calories: 760, protein: 48, carbs: 72, fat: 22, time: '35 mins', pinned: false },
+      { name: 'Greek Yoghurt with Berries', type: 'snack', calories: 150, protein: 10, carbs: 18, fat: 3, time: '2 mins', pinned: false }
     ],
     Wed: [
-      { name: 'Porridge with Banana and Honey', type: 'breakfast', calories: 320, protein: 10, carbs: 62, fat: 5, time: '10 mins', pinned: false },
       { name: 'Chicken Caesar Salad with Croutons', type: 'lunch', calories: 420, protein: 34, carbs: 22, fat: 18, time: '15 mins', pinned: false },
-      { name: 'Slow Cooker Chicken and Vegetable Casserole (Double Portion)', type: 'dinner', calories: 655, protein: 52, carbs: 44, fat: 14, time: '20 mins', pinned: false }
+      { name: 'Slow Cooker Chicken and Vegetable Casserole', type: 'dinner', calories: 580, protein: 52, carbs: 44, fat: 14, time: '20 mins', pinned: false },
+      { name: 'Rice Cakes with Cottage Cheese', type: 'snack', calories: 180, protein: 12, carbs: 22, fat: 4, time: '3 mins', pinned: false }
     ],
     Thu: [
-      { name: 'Greek Yoghurt with Granola and Berries', type: 'breakfast', calories: 320, protein: 14, carbs: 48, fat: 8, time: '5 mins', pinned: false },
       { name: 'Leftover Chicken and Vegetable Casserole', type: 'lunch', calories: 380, protein: 32, carbs: 28, fat: 10, time: '5 mins', pinned: false },
-      { name: 'Leftover Chicken and Vegetable Casserole', type: 'dinner', calories: 380, protein: 32, carbs: 28, fat: 10, time: '5 mins', pinned: false }
+      { name: 'Jacket Potato with Cheese and Baked Beans', type: 'dinner', calories: 580, protein: 22, carbs: 80, fat: 14, time: '15 mins', pinned: false },
+      { name: 'Handful of Mixed Nuts', type: 'snack', calories: 180, protein: 5, carbs: 6, fat: 16, time: '1 min', pinned: false }
     ],
     Fri: [
-      { name: 'Cottage Cheese and Blueberry Jam Bagel', type: 'breakfast', calories: 380, protein: 18, carbs: 52, fat: 9, time: '10 mins', pinned: false },
       { name: 'Ham and Cheese Toast with Side Salad', type: 'lunch', calories: 420, protein: 24, carbs: 38, fat: 14, time: '10 mins', pinned: false },
-      { name: 'Spaghetti Bolognese with Garlic Bread', type: 'dinner', calories: 825, protein: 44, carbs: 88, fat: 24, time: '35 mins', pinned: false }
+      { name: 'Spaghetti Bolognese with Garlic Bread', type: 'dinner', calories: 825, protein: 44, carbs: 88, fat: 24, time: '35 mins', pinned: false },
+      { name: 'Oatcakes with Hummus', type: 'snack', calories: 200, protein: 6, carbs: 24, fat: 9, time: '3 mins', pinned: false }
     ],
     Sat: [
-      { name: 'Full English Breakfast (2 eggs, 2 bacon, beans, toast)', type: 'breakfast', calories: 680, protein: 38, carbs: 52, fat: 28, time: '20 mins', pinned: false },
       { name: 'Jacket Potato with Cheese and Beans', type: 'lunch', calories: 520, protein: 22, carbs: 72, fat: 14, time: '15 mins', pinned: false },
-      { name: 'Roast Chicken Dinner with Roasted Vegetables', type: 'dinner', calories: 550, protein: 48, carbs: 38, fat: 16, time: '40 mins', pinned: false }
+      { name: 'Roast Chicken Dinner with Roasted Vegetables', type: 'dinner', calories: 550, protein: 48, carbs: 38, fat: 16, time: '40 mins', pinned: false },
+      { name: 'Banana with Peanut Butter', type: 'snack', calories: 220, protein: 6, carbs: 32, fat: 8, time: '2 mins', pinned: false }
     ],
     Sun: [
-      { name: 'Pancakes with Maple Syrup and Bacon', type: 'breakfast', calories: 520, protein: 18, carbs: 62, fat: 18, time: '20 mins', pinned: false },
       { name: 'Chicken and Bacon Sandwich with Crisps', type: 'lunch', calories: 480, protein: 28, carbs: 42, fat: 16, time: '10 mins', pinned: false },
-      { name: 'Beef Stir Fry with Noodles', type: 'dinner', calories: 595, protein: 38, carbs: 58, fat: 18, time: '25 mins', pinned: false }
+      { name: 'Beef Stir Fry with Noodles', type: 'dinner', calories: 595, protein: 38, carbs: 58, fat: 18, time: '25 mins', pinned: false },
+      { name: 'String Cheese and Apple', type: 'snack', calories: 160, protein: 8, carbs: 20, fat: 6, time: '1 min', pinned: false }
     ]
   };
-  const SEEDED_WEEK = '2026-04-13';
+  const SEEDED_WEEK = '2026-04-14';
 
   DAYS.forEach(d => weekPlan[d] = []);
 
@@ -971,25 +997,29 @@
     localStorage.setItem('hmp_shopping', JSON.stringify(shoppingItems));
     localStorage.setItem('hmp_favs', JSON.stringify(favourites));
     localStorage.setItem('hmp_snacks', JSON.stringify(snackBank));
+    localStorage.setItem('hmp_lowspoon', JSON.stringify(lowSpoonBank));
     localStorage.setItem('hmp_ahead', JSON.stringify(aheadPlan));
     localStorage.setItem('hmp_profile', JSON.stringify(profile));
+    localStorage.setItem('hmp_prefs', JSON.stringify(prefs)); // stored SEPARATELY
   }
   function loadLocalState() {
     try {
-      const p = localStorage.getItem('hmp_plan');
-      if (p) weekPlan = JSON.parse(p);
-      const pm = localStorage.getItem('hmp_plan_meta');
-      if (pm) weekPlanMeta = JSON.parse(pm);
-      const s = localStorage.getItem('hmp_shopping');
-      if (s) shoppingItems = JSON.parse(s);
-      const f = localStorage.getItem('hmp_favs');
-      if (f) favourites = JSON.parse(f);
-      const sn = localStorage.getItem('hmp_snacks');
-      if (sn) snackBank = JSON.parse(sn);
-      const ah = localStorage.getItem('hmp_ahead');
-      if (ah) aheadPlan = JSON.parse(ah);
-      const pr = localStorage.getItem('hmp_profile');
-      if (pr) profile = { ...profile, ...JSON.parse(pr) };
+      const p = localStorage.getItem('hmp_plan'); if (p) weekPlan = JSON.parse(p);
+      const pm = localStorage.getItem('hmp_plan_meta'); if (pm) weekPlanMeta = JSON.parse(pm);
+      const s = localStorage.getItem('hmp_shopping'); if (s) shoppingItems = JSON.parse(s);
+      const f = localStorage.getItem('hmp_favs'); if (f) favourites = JSON.parse(f);
+      const sn = localStorage.getItem('hmp_snacks'); if (sn) snackBank = JSON.parse(sn);
+      const ls = localStorage.getItem('hmp_lowspoon'); if (ls) lowSpoonBank = JSON.parse(ls);
+      const ah = localStorage.getItem('hmp_ahead'); if (ah) aheadPlan = JSON.parse(ah);
+      const pr = localStorage.getItem('hmp_profile'); if (pr) profile = { ...profile, ...JSON.parse(pr) };
+      // Load prefs from their own key (fixes the merge bug)
+      const pref = localStorage.getItem('hmp_prefs');
+      if (pref) prefs = JSON.parse(pref);
+      else {
+        // Migrate from old profile.prefs if present
+        const oldProfile = pr ? JSON.parse(pr) : null;
+        if (oldProfile?.prefs) { prefs = oldProfile.prefs; localStorage.setItem('hmp_prefs', JSON.stringify(prefs)); }
+      }
     } catch(e) {}
   }
 
@@ -1032,10 +1062,14 @@
       if (record.shoppingItems) shoppingItems = record.shoppingItems;
       if (record.favourites) favourites = record.favourites;
       if (record.snackBank) snackBank = record.snackBank;
+      if (record.lowSpoonBank) lowSpoonBank = record.lowSpoonBank;
       if (record.aheadPlan) aheadPlan = record.aheadPlan;
-      if (record.profile) profile = { ...profile, ...record.profile, prefs: { ...profile.prefs, ...(record.profile.prefs || {}) } };
+      if (record.profile) profile = { ...profile, ...record.profile };
+      // Load prefs from their own key — never nested in profile
+      if (record.prefs) prefs = record.prefs;
+      else if (record.profile?.prefs) prefs = record.profile.prefs; // migrate old format
       DAYS.forEach(d => { if (!weekPlan[d]) weekPlan[d] = []; });
-      // Seed if bin had no meals
+      // Seed if empty
       const hasAnyMeals = Object.values(weekPlan).some(d => d.length > 0);
       if (!hasAnyMeals) {
         weekPlan = { ...SEEDED_PLAN };
@@ -1052,6 +1086,7 @@
     renderShoppingList();
     renderFavourites();
     renderSnackBank();
+    renderLowSpoonBank();
     renderTracker();
   }
 
@@ -1064,7 +1099,7 @@
       const res = await fetch(`${JB_BASE}/b/${binId}`, {
         method: 'PUT',
         headers: await jbHeaders(),
-        body: JSON.stringify({ weekPlan, weekPlanMeta, shoppingItems, favourites, snackBank, aheadPlan, profile })
+        body: JSON.stringify({ weekPlan, weekPlanMeta, shoppingItems, favourites, snackBank, lowSpoonBank, aheadPlan, profile, prefs })
       });
       if (!res.ok) throw new Error(res.status);
       setSyncStatus('ok', 'synced just now');
@@ -1120,19 +1155,18 @@
     document.getElementById('p-goal-weight').value = profile.goalWeight || '';
     document.getElementById('p-activity').value = profile.activity || 1.2;
     document.getElementById('p-deficit').value = profile.deficit || 500;
-    // Populate preferences
-    const pr = profile.prefs || {};
-    document.getElementById('pref-dislikes').value = pr.dislikes || '';
-    document.getElementById('pref-allergies').value = pr.allergies || '';
-    document.getElementById('pref-loves').value = pr.loves || '';
-    document.getElementById('pref-avoid-cuisines').value = pr.avoidCuisines || '';
-    document.getElementById('pref-other').value = pr.other || '';
+    // Read from standalone prefs object
+    document.getElementById('pref-dislikes').value = prefs.dislikes || '';
+    document.getElementById('pref-allergies').value = prefs.allergies || '';
+    document.getElementById('pref-loves').value = prefs.loves || '';
+    document.getElementById('pref-avoid-cuisines').value = prefs.avoidCuisines || '';
+    document.getElementById('pref-other').value = prefs.other || '';
     updatePrefsPreview();
     if (profile.weight && profile.height && profile.age) recalculate();
   }
 
   function savePreferences() {
-    profile.prefs = {
+    prefs = {
       dislikes: document.getElementById('pref-dislikes').value.trim(),
       allergies: document.getElementById('pref-allergies').value.trim(),
       loves: document.getElementById('pref-loves').value.trim(),
@@ -1141,18 +1175,31 @@
     };
     saveState();
     updatePrefsPreview();
-    alert('Preferences saved — they\'ll apply to your next meal suggestion or plan.');
+    alert('Preferences saved — they\'ll apply to all future suggestions.');
+  }
+
+  function updatePrefsPreview() {
+    const parts = [];
+    if (prefs.allergies) parts.push(`Avoids: ${prefs.allergies}`);
+    if (prefs.dislikes) parts.push(`Dislikes: ${prefs.dislikes}`);
+    if (prefs.loves) parts.push(`Loves: ${prefs.loves}`);
+    if (prefs.other) parts.push(prefs.other);
+    const card = document.getElementById('prefs-summary-card');
+    const text = document.getElementById('prefs-summary-text');
+    if (card && text) {
+      if (parts.length) { text.textContent = parts.join(' · '); card.style.display = 'block'; }
+      else { card.style.display = 'none'; }
+    }
   }
 
   function buildPrefsPromptContext() {
-    const pr = profile.prefs || {};
     const parts = [];
-    if (pr.allergies) parts.push(`NEVER include (allergies/intolerances — strict): ${pr.allergies}`);
-    if (pr.dislikes) parts.push(`NEVER suggest (dislikes — strict): ${pr.dislikes}`);
-    if (pr.loves) parts.push(`Cuisines she enjoys: ${pr.loves}`);
-    if (pr.avoidCuisines) parts.push(`Cuisines/styles to avoid: ${pr.avoidCuisines}`);
-    if (pr.other) parts.push(pr.other);
-    return parts.length ? '\n' + parts.join('\n') : '';
+    if (prefs.allergies) parts.push(`NEVER include — allergies/intolerances (strict rule): ${prefs.allergies}`);
+    if (prefs.dislikes) parts.push(`NEVER suggest — foods she dislikes (strict rule, no exceptions): ${prefs.dislikes}`);
+    if (prefs.loves) parts.push(`Cuisines she enjoys: ${prefs.loves}`);
+    if (prefs.avoidCuisines) parts.push(`Cuisines/styles to avoid: ${prefs.avoidCuisines}`);
+    if (prefs.other) parts.push(prefs.other);
+    return parts.length ? '\n\nSTRICT FOOD RULES — follow these without exception:\n' + parts.join('\n') : '';
   }
 
   function updatePrefsPreview() {
@@ -1248,6 +1295,7 @@
     if (id === 'shopping') renderShoppingList();
     if (id === 'favourites') renderFavourites();
     if (id === 'snacks') renderSnackBank();
+    if (id === 'lowspoon') renderLowSpoonBank();
     if (id === 'ahead') initAheadTab();
   }
 
@@ -1291,37 +1339,43 @@
     btn.innerHTML = '<span class="spinner"></span> Finding meals…';
     const mood = [...document.querySelectorAll('#mood-chips .chip.on')].map(c => c.textContent).join(', ');
     const extra = document.getElementById('extra-input').value;
-    const typeStr = mealType ? `Focus on ${mealType} meals only.` : 'Mix of breakfast, lunch, and dinner.';
+    // No breakfast — lunch, dinner, or snack only
+    const typeStr = mealType
+      ? `Focus on ${mealType} only.`
+      : 'Mix of lunch, dinner, and snack options (Hannah rarely eats breakfast).';
     const target = getCalorieTarget();
     const prefsCtx = buildPrefsPromptContext();
 
-    // Build list of meals already in the plan this week to avoid repetition
+    // Avoid meals already in plan AND recently suggested
     const planMeals = Object.values(weekPlan).flat().map(m => m.name).filter(Boolean);
-    const recentStr = planMeals.length
-      ? `\n\nMeals already in this week's plan — DO NOT suggest these or anything very similar: ${planMeals.join(', ')}.`
+    const avoidList = [...new Set([...planMeals, ...suggestionHistory])];
+    const avoidStr = avoidList.length
+      ? `\n\nDO NOT suggest any of these — already planned or recently suggested: ${avoidList.join(', ')}.`
       : '';
 
-    const prompt = `You are a weight loss meal planner for Hannah, who is based in the UK. She has no dietary restrictions unless specified below. She wants meals under 40 minutes, targets ~${target} calories/day, and struggles with appetite (needs filling meals), variety, and planning. Use UK ingredient names and supermarket-friendly portions (e.g. rashers not strips, courgette not zucchini, chips not fries where relevant, grams not ounces).
+    const prompt = `You are a weight loss meal planner for Hannah, who is based in the UK. She rarely eats breakfast so suggest lunch, dinner, or snack ideas only. She wants meals under 40 minutes, targets ~${target} calories/day, needs filling meals (struggles with appetite), and wants variety. Use UK ingredient names (grams, ml, °C, courgette not zucchini, etc.).
 
-IMPORTANT — strictly follow these preference rules:${prefsCtx || ' No specific preferences set.'}${recentStr}
+STRICT FOOD RULES — follow without exception:${prefsCtx || ' None set yet.'}${avoidStr}
 
 ${typeStr}
-Mood/preferences today: ${mood || 'no preference'}
-${extra ? 'Extra info: ' + extra : ''}
+Mood/cravings today: ${mood || 'no preference'}
+${extra ? 'Extra context: ' + extra : ''}
 
-Suggest exactly 3 meals that are DIFFERENT from anything already in the plan. Return ONLY this JSON (no markdown, no backticks):
-{"meals":[{"name":"string","type":"breakfast|lunch|dinner","calories":0,"protein":0,"carbs":0,"fat":0,"time":"string","tags":["string"],"why":"one sentence why this suits Hannah today","ingredients":["string"]}]}`;
+Suggest exactly 3 varied meals — no repeating cuisines or proteins across suggestions. Return ONLY this JSON (no markdown, no backticks):
+{"meals":[{"name":"string","type":"lunch|dinner|snack","calories":0,"protein":0,"carbs":0,"fat":0,"time":"string","tags":["string"],"why":"one sentence why this suits Hannah today","ingredients":["string"]}]}`;
 
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Get meal ideas';
     if (!raw || raw.startsWith('__')) {
-        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
-        else if (raw) alert("Something went wrong — please try again.");
-        return;
-      }
+      if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
+      else if (raw) alert("Something went wrong — please try again.");
+      return;
+    }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+      // Track suggestions to avoid repetition next time
+      suggestionHistory = [...suggestionHistory, ...parsed.meals.map(m => m.name)].slice(-20);
       renderSuggestions(parsed.meals);
     } catch(e) {
       document.getElementById('suggest-results').innerHTML = '<p style="color:var(--text-2);font-size:14px;">Couldn\'t parse suggestions — try again.</p>';
@@ -1346,11 +1400,7 @@ Suggest exactly 3 meals that are DIFFERENT from anything already in the plan. Re
   function getSmartPlannerContext() {
     try {
       const raw = localStorage.getItem('smartplanner_week') || localStorage.getItem('planner_week_summary');
-      if (!raw || raw.startsWith('__')) {
-        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
-        else if (raw) alert("Something went wrong — please try again.");
-        return null;
-      }
+      if (!raw) return null;
       return JSON.parse(raw);
     } catch(e) { return null; }
   }
@@ -1430,7 +1480,7 @@ Suggest exactly 3 meals that are DIFFERENT from anything already in the plan. Re
   }
 
   // ── Meal suggestion rendering (with heart button) ──
-  const typeColor = { breakfast:'pill-amber', lunch:'pill-green', dinner:'pill-blue' };
+  const typeColor = { lunch:'pill-green', dinner:'pill-blue', snack:'pill-amber' };
 
   function renderSuggestions(meals) {
     const out = document.getElementById('suggest-results');
@@ -1529,43 +1579,48 @@ Suggest exactly 3 meals that are DIFFERENT from anything already in the plan. Re
       if (pinned.length) pinnedMeals[d] = pinned;
     });
     const pinnedStr = Object.keys(pinnedMeals).length
-      ? '\n\nPinned meals (keep exactly as-is, do not change these):\n' +
+      ? '\n\nPinned meals (keep exactly as-is):\n' +
         Object.entries(pinnedMeals).map(([d, meals]) =>
           `${d}: ${meals.map(m => `${m.type} = "${m.name}"`).join(', ')}`
         ).join('\n')
       : '';
 
-    const prompt = `Create a 7-day weight loss meal plan for Hannah, who is based in the UK. No dietary restrictions unless specified below. 20-40 minute meals. ~${target} calories/day total. Meals should be filling and satisfying. Include breakfast, lunch, and dinner each day. Use varied, interesting recipes with UK ingredient names and supermarket-friendly portions (grams, not ounces; ml not fl oz; courgette not zucchini, etc.).
+    const prompt = `Create a 7-day weight loss meal plan for Hannah, who is based in the UK. She RARELY eats breakfast so include ONLY lunch, dinner, and 1 snack per day (no breakfast). 20-40 minute meals. ~${target} calories/day total (split roughly: lunch 400-500 kcal, dinner 500-650 kcal, snack 150-250 kcal). Meals must be filling, varied, and stomach-friendly.
+
+VARIETY RULES — strictly enforce across the whole week:
+- No cuisine type (e.g. curry, stew, casserole, stir fry) more than ONCE across the 7 days
+- No main protein (e.g. chicken, beef, pork) more than TWICE across the 7 days  
+- Each day's lunch and dinner must use different proteins
+- Snacks should be simple, grabbable, and different each day
+
+STRICT FOOD RULES — follow without exception:${prefsCtx || ' None set.'}
 
 ${favsStr}
-${wants ? 'This week Hannah wants: ' + wants : ''}${smartCtx}${prefsCtx}${pinnedStr}
+${wants ? 'This week Hannah wants: ' + wants : ''}${smartCtx}${pinnedStr}
 
-If a day is flagged as busy from the smart planner context, add a "busy":true field to that day's meals. For pinned meals, copy them exactly from the pinned list above and set "pinned":true.
+If a day is flagged as busy, add "busy":true. For pinned meals copy exactly and set "pinned":true.
 
 Return ONLY this JSON (no markdown, no backticks):
-{"Mon":[{"name":"","type":"breakfast","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false},...],"Tue":[...],"Wed":[...],"Thu":[...],"Fri":[...],"Sat":[...],"Sun":[...]}`;
+{"Mon":[{"name":"","type":"lunch","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false},{"name":"","type":"dinner","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false},{"name":"","type":"snack","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false}],"Tue":[...],"Wed":[...],"Thu":[...],"Fri":[...],"Sat":[...],"Sun":[...]}`;
 
     const raw = await callClaude(prompt);
     btn.disabled = false;
     btn.innerHTML = 'Auto-generate full week';
     if (!raw || raw.startsWith('__')) {
-        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
-        else if (raw) alert("Something went wrong — please try again.");
-        return;
-      }
+      if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
+      else if (raw) alert("Something went wrong — please try again.");
+      return;
+    }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
-      // Merge: keep pinned meals from existing plan, fill rest from AI response
       DAYS.forEach(d => {
         const aiDay = parsed[d] || [];
         const existingPinned = (weekPlan[d] || []).filter(m => m.pinned);
         if (existingPinned.length) {
-          // Replace AI meals of matching type with pinned versions
           const result = aiDay.map(aiMeal => {
             const pin = existingPinned.find(p => p.type === aiMeal.type);
             return pin ? { ...pin, pinned: true } : aiMeal;
           });
-          // Add any pinned meals whose type wasn't in AI response
           existingPinned.forEach(pin => {
             if (!result.find(m => m.type === pin.type)) result.push({ ...pin, pinned: true });
           });
@@ -1828,6 +1883,126 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
     const prompt = `Give Hannah one short, practical, personalised nutrition tip for weight loss. Context: ${avgCal ? 'averaging ' + avgCal + ' kcal/day against a target of ' + target : 'just starting out'}, weight ${profile.weight}kg (${kgToStone(profile.weight)}), no dietary restrictions, meals under 40 minutes, based in the UK, struggles with appetite and trying new meals. Use UK measurements and food references. Keep it warm, encouraging, and specific — 3-4 sentences max.`;
     const raw = await callClaude(prompt);
     el.textContent = raw || 'Could not generate tip — try again.';
+  }
+
+  // ── Low spoon meals ──
+  const DEFAULT_LOW_SPOON = [
+    { name: 'Jacket Potato with Beans and Cheese', calories: 550, protein: 22, carbs: 80, fat: 14, time: '5 mins active', description: 'Microwave potato (8 mins), top with tinned beans and grated cheese. Zero washing up.', saved: true },
+    { name: 'Scrambled Eggs on Toast', calories: 380, protein: 20, carbs: 32, fat: 16, time: '5 mins', description: 'Two eggs, buttered wholemeal toast. Gentle, filling, and almost no effort.', saved: true },
+    { name: 'Tin of Soup with Crusty Bread', calories: 320, protein: 10, carbs: 48, fat: 8, time: '3 mins', description: 'Heat a good quality tin soup, dip bread. Warm, comforting, one pan.', saved: true },
+    { name: 'Cheese and Crackers with Grapes', calories: 350, protein: 14, carbs: 30, fat: 18, time: '2 mins', description: 'No cooking required. Cheddar, oatcakes, a handful of grapes. Done.', saved: true },
+    { name: 'Pasta with Butter and Parmesan', calories: 480, protein: 14, carbs: 72, fat: 16, time: '12 mins', description: 'Boil pasta, toss with butter and grated parmesan. Bland, filling, easy on the stomach.', saved: true },
+  ];
+
+  function initLowSpoonBank() {
+    // Pre-load defaults only if bank is empty
+    if (!lowSpoonBank.length) {
+      lowSpoonBank = [...DEFAULT_LOW_SPOON];
+      saveState();
+    }
+  }
+
+  function renderLowSpoonBank() {
+    initLowSpoonBank();
+    const el = document.getElementById('lowspoon-content');
+    if (!el) return;
+    el.innerHTML = `<div class="card" style="padding:0.5rem 1.25rem;">` +
+      lowSpoonBank.map((m, i) => `
+        <div class="fav-card">
+          <div class="fav-info">
+            <div class="fav-name">${m.name}</div>
+            <div class="fav-meta" style="margin-top:3px;font-size:13px;color:var(--text-2);">${m.description}</div>
+            <div class="macro-row" style="margin-top:6px;">
+              <span class="macro-chip">${m.calories} kcal</span>
+              <span class="macro-chip">${m.time}</span>
+              <span class="macro-chip">${m.protein}g protein</span>
+            </div>
+          </div>
+          <div class="fav-actions" style="flex-direction:column;gap:6px;">
+            <button class="btn ls-recipe-btn" style="font-size:12px;padding:6px 10px;" data-name="${encodeURIComponent(m.name)}" data-cal="${m.calories}">Recipe</button>
+            <button class="btn ls-plan-btn" style="font-size:12px;padding:6px 10px;" data-idx="${i}">+ Plan</button>
+            ${!m.saved ? `<button class="heart-btn active" onclick="removeLowSpoon(${i})" title="Remove">♥</button>` : ''}
+          </div>
+        </div>
+      `).join('') + '</div>';
+    // Attach handlers
+    el.querySelectorAll('.ls-recipe-btn').forEach(btn => {
+      btn.addEventListener('click', () => getRecipe(btn.dataset.name, btn.dataset.cal));
+    });
+    el.querySelectorAll('.ls-plan-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const m = lowSpoonBank[parseInt(btn.dataset.idx)];
+        addMealToPlan({ ...m, type: 'dinner', pinned: false });
+      });
+    });
+  }
+
+  async function getLowSpoonSuggestions() {
+    const btn = document.getElementById('lowspoon-suggest-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Finding meals…';
+    const notes = document.getElementById('lowspoon-notes').value.trim();
+    const existing = lowSpoonBank.map(m => m.name).join(', ');
+    const prefsCtx = buildPrefsPromptContext();
+
+    const prompt = `Suggest 3 low spoon meals for Hannah. She is based in the UK and is trying to lose weight. Low spoon means: minimal prep, few ingredients, easy on the stomach, no complicated techniques, quick to make or just needs reheating.
+${notes ? 'How she is feeling today: ' + notes : ''}
+${existing ? 'She already has these — suggest different ones: ' + existing : ''}
+STRICT FOOD RULES:${prefsCtx || ' None.'}
+
+Return ONLY this JSON (no backticks):
+{"meals":[{"name":"string","calories":0,"protein":0,"carbs":0,"fat":0,"time":"string","description":"one sentence — how easy/simple it is"}]}`;
+
+    const raw = await callClaude(prompt);
+    btn.disabled = false;
+    btn.innerHTML = 'Suggest low spoon meals';
+    if (!raw || raw.startsWith('__')) {
+      if (raw === '__OVERLOADED__') alert("Servers busy — try again in a moment.");
+      else if (raw) alert("Something went wrong — try again.");
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
+      renderLowSpoonSuggestions(parsed.meals);
+    } catch(e) {
+      document.getElementById('lowspoon-suggest-results').innerHTML = '<p style="color:var(--text-2);font-size:14px;">Couldn\'t load — try again.</p>';
+      document.getElementById('lowspoon-suggest-output').style.display = 'block';
+    }
+  }
+
+  function renderLowSpoonSuggestions(meals) {
+    const out = document.getElementById('lowspoon-suggest-results');
+    out.innerHTML = meals.map((m, i) => `
+      <div class="card">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+          <div style="flex:1;">
+            <div class="meal-name">${m.name}</div>
+            <div class="meal-why">${m.description}</div>
+            <div class="macro-row" style="margin-top:6px;">
+              <span class="macro-chip">${m.calories} kcal</span>
+              <span class="macro-chip">${m.time}</span>
+              <span class="macro-chip">${m.protein}g protein</span>
+            </div>
+          </div>
+          <button class="heart-btn" onclick='saveLowSpoon(${JSON.stringify(m).replace(/'/g,"&#39;")},this)' title="Save to low spoon bank">♥</button>
+        </div>
+      </div>
+    `).join('');
+    document.getElementById('lowspoon-suggest-output').style.display = 'block';
+  }
+
+  function saveLowSpoon(meal, btn) {
+    if (lowSpoonBank.some(m => m.name === meal.name)) return;
+    lowSpoonBank.push({ ...meal, saved: false });
+    btn.classList.add('active');
+    saveState();
+    renderLowSpoonBank();
+  }
+
+  function removeLowSpoon(idx) {
+    lowSpoonBank.splice(idx, 1);
+    saveState();
+    renderLowSpoonBank();
   }
 
   // ── Week ahead ──
