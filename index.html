@@ -329,6 +329,8 @@
     .action-sheet-btn.danger:hover { background: var(--coral-light); }
     .action-sheet-cancel { margin-top: 8px; width: 100%; padding: 13px; border-radius: var(--radius); border: none; background: var(--surface-2); font-size: 15px; font-weight: 500; font-family: 'DM Sans', sans-serif; color: var(--text-2); cursor: pointer; }
 
+    .day-meal.skipped { background: var(--surface-2); color: var(--text-3); font-style: italic; cursor: pointer; }
+
     /* ── Bottom tab bar (mobile only) ── */
     .bottom-nav { display: none; }
 
@@ -389,8 +391,8 @@
       <button class="nav-item" onclick="showTab('week',this)">
         <span class="nav-icon">▦</span> Weekly plan
       </button>
-      <button class="nav-item" onclick="showTab('ahead',this)">
-        <span class="nav-icon">▷</span> Week ahead
+      <button class="nav-item" onclick="showTab('prep',this)">
+        <span class="nav-icon">✓</span> Sunday prep
       </button>
       <button class="nav-item" onclick="showTab('shopping',this)">
         <span class="nav-icon">⊡</span> Shopping list
@@ -613,52 +615,42 @@
       </div>
     </div>
 
-    <!-- Week ahead -->
-    <div id="ahead" class="section">
-      <h2 class="page-title">Week ahead</h2>
-      <p class="page-sub" id="ahead-subtitle">Plan next week, get your shopping list, and build a Sunday prep checklist.</p>
+    <!-- Sunday prep -->
+    <div id="prep" class="section">
+      <h2 class="page-title">Sunday prep</h2>
+      <p class="page-sub">Get ready for the week ahead. Based on what you've already planned.</p>
 
-      <div class="card">
-        <span class="label">Next week</span>
-        <div id="ahead-date-range" style="font-size:13px;color:var(--text-2);margin-bottom:1rem;"></div>
-        <textarea id="ahead-wants" placeholder="Anything specific for next week? e.g. 'I've got a busy Thursday', 'want something warming', 'using up sweet potatoes'…" style="min-height:56px;margin-bottom:1rem;"></textarea>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button class="btn btn-primary" id="ahead-gen-btn" onclick="generateAheadWeek()">Plan next week</button>
-          <button class="btn" id="ahead-clear-btn" onclick="clearAheadPlan()">Clear</button>
-        </div>
+      <div class="card" id="prep-no-plan" style="display:none;">
+        <p style="font-size:14px;color:var(--text-2);">No meals planned yet for this week — generate your weekly plan first, then come back here to prep.</p>
+        <button class="btn btn-primary" style="margin-top:1rem;" onclick="showTab('week',document.querySelector('.nav-item:nth-child(2)'))">Go to plan →</button>
       </div>
 
-      <!-- Next week grid -->
-      <div id="ahead-grid-wrap" style="display:none;">
-        <span class="label" style="margin-bottom:10px;">Next week's meals</span>
-        <div class="week-grid" id="ahead-week-grid" style="margin-bottom:1.25rem;"></div>
+      <div id="prep-content-wrap">
+        <div class="card" style="margin-bottom:1rem;">
+          <span class="label">This week's plan</span>
+          <div id="prep-plan-summary" style="font-size:13px;color:var(--text-2);line-height:1.8;"></div>
+        </div>
 
-        <!-- Shopping list for next week -->
         <div class="card" style="margin-bottom:1rem;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
             <div>
-              <span class="label" style="margin-bottom:2px;">Shopping list</span>
-              <p style="font-size:13px;color:var(--text-2);">Everything you need for next week.</p>
+              <span class="label" style="margin-bottom:2px;">Shopping review</span>
+              <p style="font-size:13px;color:var(--text-2);">Everything you need for this week.</p>
             </div>
-            <button class="btn btn-primary" id="ahead-shop-btn" onclick="generateAheadShopping()">Build list</button>
+            <button class="btn btn-primary" id="prep-shop-btn" onclick="generatePrepShopping()">Build shopping list</button>
           </div>
-          <div id="ahead-shop-content" style="margin-top:1rem;display:none;"></div>
+          <div id="prep-shop-content" style="margin-top:1rem;display:none;"></div>
         </div>
 
-        <!-- Prep checklist -->
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
             <div>
-              <span class="label" style="margin-bottom:2px;">Sunday prep checklist</span>
-              <p style="font-size:13px;color:var(--text-2);">What to batch cook, defrost, and prep in advance.</p>
+              <span class="label" style="margin-bottom:2px;">Batch cook &amp; prep checklist</span>
+              <p style="font-size:13px;color:var(--text-2);">What to do today to make the week easier.</p>
             </div>
-            <button class="btn btn-primary" id="ahead-prep-btn" onclick="generatePrepChecklist()">Generate checklist</button>
+            <button class="btn btn-primary" id="prep-checklist-btn" onclick="generatePrepChecklist()">Generate checklist</button>
           </div>
-          <div id="ahead-prep-content" style="margin-top:1rem;display:none;"></div>
-        </div>
-
-        <div style="margin-top:1rem;">
-          <button class="btn" onclick="copyAheadToCurrentWeek()">Copy to this week's plan →</button>
+          <div id="prep-checklist-content" style="margin-top:1rem;display:none;"></div>
         </div>
       </div>
     </div>
@@ -819,9 +811,9 @@
     <span class="bn-icon">▦</span>
     <span>Plan</span>
   </button>
-  <button class="bottom-nav-item" onclick="showTab('ahead',this)" data-tab="ahead">
-    <span class="bn-icon">▷</span>
-    <span>Next week</span>
+  <button class="bottom-nav-item" onclick="showTab('prep',this)" data-tab="prep">
+    <span class="bn-icon">✓</span>
+    <span>Prep</span>
   </button>
   <button class="bottom-nav-item" onclick="showTab('lowspoon',this)" data-tab="lowspoon">
     <span class="bn-icon">🌿</span>
@@ -880,42 +872,59 @@
 
   let profile = { weight: 146, height: 168, age: 31, goalWeight: null, activity: 1.2, deficit: 500 };
 
+  const MEAL_TYPES = ['breakfast', 'lunch', 'afternoon snack', 'dinner', 'evening snack'];
+  const MEAL_TYPE_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', 'afternoon snack': 'Afternoon snack', dinner: 'Dinner', 'evening snack': 'Evening snack' };
+
   // ── Pre-populated plan for w/c 14 April 2026 ──
   const SEEDED_PLAN = {
     Mon: [
-      { name: 'Greek Chicken and Rice Bowl', type: 'lunch', calories: 520, protein: 38, carbs: 48, fat: 12, time: '25 mins', pinned: false },
-      { name: 'Beef Mince and Sweet Potato Shepherd\'s Pie', type: 'dinner', calories: 625, protein: 42, carbs: 58, fat: 18, time: '40 mins', pinned: false },
-      { name: 'Apple and Peanut Butter', type: 'snack', calories: 200, protein: 5, carbs: 22, fat: 10, time: '2 mins', pinned: false }
+      { name: 'Scrambled Eggs on Toast', type: 'breakfast', calories: 350, protein: 20, carbs: 32, fat: 14, time: '10 mins', pinned: false },
+      { name: 'Greek Chicken and Rice Bowl', type: 'lunch', calories: 480, protein: 38, carbs: 45, fat: 12, time: '25 mins', pinned: false },
+      { name: 'Apple and Peanut Butter', type: 'afternoon snack', calories: 180, protein: 5, carbs: 22, fat: 9, time: '2 mins', pinned: false },
+      { name: "Beef Mince and Sweet Potato Shepherd's Pie", type: 'dinner', calories: 580, protein: 42, carbs: 55, fat: 18, time: '40 mins', pinned: false },
+      { name: 'Greek Yoghurt with Honey', type: 'evening snack', calories: 130, protein: 10, carbs: 18, fat: 2, time: '2 mins', pinned: false }
     ],
     Tue: [
-      { name: 'Turkey and Avocado Wrap with Crisps', type: 'lunch', calories: 480, protein: 30, carbs: 42, fat: 16, time: '10 mins', pinned: false },
-      { name: 'Chicken Tikka Masala with Basmati Rice', type: 'dinner', calories: 760, protein: 48, carbs: 72, fat: 22, time: '35 mins', pinned: false },
-      { name: 'Greek Yoghurt with Berries', type: 'snack', calories: 150, protein: 10, carbs: 18, fat: 3, time: '2 mins', pinned: false }
+      { name: 'Porridge with Banana', type: 'breakfast', calories: 300, protein: 9, carbs: 58, fat: 5, time: '5 mins', pinned: false },
+      { name: 'Turkey and Avocado Wrap', type: 'lunch', calories: 440, protein: 30, carbs: 38, fat: 15, time: '10 mins', pinned: false },
+      { name: 'Rice Cakes with Cottage Cheese', type: 'afternoon snack', calories: 150, protein: 12, carbs: 18, fat: 3, time: '2 mins', pinned: false },
+      { name: 'Chicken Tikka Masala with Basmati Rice', type: 'dinner', calories: 680, protein: 46, carbs: 70, fat: 18, time: '35 mins', pinned: false },
+      { name: 'Handful of Mixed Nuts', type: 'evening snack', calories: 160, protein: 5, carbs: 5, fat: 14, time: '1 min', pinned: false }
     ],
     Wed: [
-      { name: 'Chicken Caesar Salad with Croutons', type: 'lunch', calories: 420, protein: 34, carbs: 22, fat: 18, time: '15 mins', pinned: false },
-      { name: 'Slow Cooker Chicken and Vegetable Casserole', type: 'dinner', calories: 580, protein: 52, carbs: 44, fat: 14, time: '20 mins', pinned: false },
-      { name: 'Rice Cakes with Cottage Cheese', type: 'snack', calories: 180, protein: 12, carbs: 22, fat: 4, time: '3 mins', pinned: false }
+      { name: 'Greek Yoghurt with Granola and Berries', type: 'breakfast', calories: 290, protein: 14, carbs: 42, fat: 7, time: '3 mins', pinned: false },
+      { name: 'Chicken Caesar Salad', type: 'lunch', calories: 400, protein: 34, carbs: 20, fat: 16, time: '15 mins', pinned: false },
+      { name: 'Oatcakes with Hummus', type: 'afternoon snack', calories: 180, protein: 5, carbs: 22, fat: 8, time: '2 mins', pinned: false },
+      { name: 'Slow Cooker Chicken and Vegetable Casserole', type: 'dinner', calories: 520, protein: 48, carbs: 38, fat: 12, time: '20 mins', pinned: false },
+      { name: 'String Cheese and Apple', type: 'evening snack', calories: 150, protein: 8, carbs: 20, fat: 5, time: '1 min', pinned: false }
     ],
     Thu: [
-      { name: 'Leftover Chicken and Vegetable Casserole', type: 'lunch', calories: 380, protein: 32, carbs: 28, fat: 10, time: '5 mins', pinned: false },
-      { name: 'Jacket Potato with Cheese and Baked Beans', type: 'dinner', calories: 580, protein: 22, carbs: 80, fat: 14, time: '15 mins', pinned: false },
-      { name: 'Handful of Mixed Nuts', type: 'snack', calories: 180, protein: 5, carbs: 6, fat: 16, time: '1 min', pinned: false }
+      { name: 'Wholemeal Toast with Peanut Butter', type: 'breakfast', calories: 320, protein: 12, carbs: 40, fat: 12, time: '5 mins', pinned: false },
+      { name: 'Leftover Chicken Casserole', type: 'lunch', calories: 360, protein: 32, carbs: 28, fat: 10, time: '5 mins', pinned: false },
+      { name: 'Banana', type: 'afternoon snack', calories: 100, protein: 1, carbs: 24, fat: 0, time: '1 min', pinned: false },
+      { name: 'Jacket Potato with Cheese and Baked Beans', type: 'dinner', calories: 560, protein: 22, carbs: 78, fat: 14, time: '15 mins', pinned: false },
+      { name: 'Rice Cakes with Almond Butter', type: 'evening snack', calories: 160, protein: 4, carbs: 20, fat: 7, time: '2 mins', pinned: false }
     ],
     Fri: [
-      { name: 'Ham and Cheese Toast with Side Salad', type: 'lunch', calories: 420, protein: 24, carbs: 38, fat: 14, time: '10 mins', pinned: false },
-      { name: 'Spaghetti Bolognese with Garlic Bread', type: 'dinner', calories: 825, protein: 44, carbs: 88, fat: 24, time: '35 mins', pinned: false },
-      { name: 'Oatcakes with Hummus', type: 'snack', calories: 200, protein: 6, carbs: 24, fat: 9, time: '3 mins', pinned: false }
+      { name: 'Scrambled Eggs on Toast', type: 'breakfast', calories: 350, protein: 20, carbs: 32, fat: 14, time: '10 mins', pinned: false },
+      { name: 'Ham and Cheese Toastie with Side Salad', type: 'lunch', calories: 420, protein: 24, carbs: 36, fat: 14, time: '10 mins', pinned: false },
+      { name: 'Satsumas and a Handful of Nuts', type: 'afternoon snack', calories: 160, protein: 4, carbs: 18, fat: 9, time: '1 min', pinned: false },
+      { name: 'Spaghetti Bolognese', type: 'dinner', calories: 620, protein: 40, carbs: 72, fat: 18, time: '35 mins', pinned: false },
+      { name: 'Greek Yoghurt with Berries', type: 'evening snack', calories: 120, protein: 10, carbs: 14, fat: 2, time: '2 mins', pinned: false }
     ],
     Sat: [
-      { name: 'Jacket Potato with Cheese and Beans', type: 'lunch', calories: 520, protein: 22, carbs: 72, fat: 14, time: '15 mins', pinned: false },
-      { name: 'Roast Chicken Dinner with Roasted Vegetables', type: 'dinner', calories: 550, protein: 48, carbs: 38, fat: 16, time: '40 mins', pinned: false },
-      { name: 'Banana with Peanut Butter', type: 'snack', calories: 220, protein: 6, carbs: 32, fat: 8, time: '2 mins', pinned: false }
+      { name: 'Full English Breakfast (2 eggs, 2 rashers, beans, toast)', type: 'breakfast', calories: 620, protein: 36, carbs: 48, fat: 26, time: '20 mins', pinned: false },
+      { name: 'Jacket Potato with Cheese and Beans', type: 'lunch', calories: 480, protein: 20, carbs: 68, fat: 12, time: '15 mins', pinned: false },
+      { name: 'Apple and Peanut Butter', type: 'afternoon snack', calories: 180, protein: 5, carbs: 22, fat: 9, time: '2 mins', pinned: false },
+      { name: 'Roast Chicken with Roasted Vegetables', type: 'dinner', calories: 520, protein: 46, carbs: 36, fat: 14, time: '40 mins', pinned: false },
+      { name: 'Oatcakes with Hummus', type: 'evening snack', calories: 150, protein: 4, carbs: 18, fat: 7, time: '3 mins', pinned: false }
     ],
     Sun: [
-      { name: 'Chicken and Bacon Sandwich with Crisps', type: 'lunch', calories: 480, protein: 28, carbs: 42, fat: 16, time: '10 mins', pinned: false },
-      { name: 'Beef Stir Fry with Noodles', type: 'dinner', calories: 595, protein: 38, carbs: 58, fat: 18, time: '25 mins', pinned: false },
-      { name: 'String Cheese and Apple', type: 'snack', calories: 160, protein: 8, carbs: 20, fat: 6, time: '1 min', pinned: false }
+      { name: 'Pancakes with Maple Syrup and Bacon', type: 'breakfast', calories: 490, protein: 16, carbs: 60, fat: 16, time: '20 mins', pinned: false },
+      { name: 'Chicken and Bacon Sandwich with Crisps', type: 'lunch', calories: 460, protein: 28, carbs: 40, fat: 16, time: '10 mins', pinned: false },
+      { name: 'Banana and Peanut Butter', type: 'afternoon snack', calories: 190, protein: 5, carbs: 28, fat: 8, time: '2 mins', pinned: false },
+      { name: 'Beef Stir Fry with Noodles', type: 'dinner', calories: 560, protein: 36, carbs: 56, fat: 16, time: '25 mins', pinned: false },
+      { name: 'Handful of Mixed Nuts', type: 'evening snack', calories: 160, protein: 5, carbs: 5, fat: 14, time: '1 min', pinned: false }
     ]
   };
   const SEEDED_WEEK = '2026-04-14';
@@ -1296,7 +1305,7 @@
     if (id === 'favourites') renderFavourites();
     if (id === 'snacks') renderSnackBank();
     if (id === 'lowspoon') renderLowSpoonBank();
-    if (id === 'ahead') initAheadTab();
+    if (id === 'prep') initPrepTab();
   }
 
   function toggleChip(el) { el.classList.toggle('on'); }
@@ -1585,13 +1594,13 @@ Suggest exactly 3 varied meals — no repeating cuisines or proteins across sugg
         ).join('\n')
       : '';
 
-    const prompt = `Create a 7-day weight loss meal plan for Hannah, who is based in the UK. She RARELY eats breakfast so include ONLY lunch, dinner, and 1 snack per day (no breakfast). 20-40 minute meals. ~${target} calories/day total (split roughly: lunch 400-500 kcal, dinner 500-650 kcal, snack 150-250 kcal). Meals must be filling, varied, and stomach-friendly.
+    const prompt = `Create a 7-day meal plan for Hannah, who is based in the UK and is trying to lose weight. Include exactly 5 meals per day: breakfast, lunch, afternoon snack, dinner, evening snack. Target ~${target} calories/day total, split roughly: breakfast 250-400 kcal, lunch 400-500 kcal, afternoon snack 150-200 kcal, dinner 450-600 kcal, evening snack 100-180 kcal. Meals should be filling, varied, and stomach-friendly. All under 40 minutes.
 
-VARIETY RULES — strictly enforce across the whole week:
-- No cuisine type (e.g. curry, stew, casserole, stir fry) more than ONCE across the 7 days
-- No main protein (e.g. chicken, beef, pork) more than TWICE across the 7 days  
+VARIETY RULES — enforce strictly across the whole week:
+- No cuisine type (e.g. curry, stew, casserole, stir fry) more than ONCE across 7 days
+- No main protein (chicken, beef, pork, etc.) more than TWICE across 7 days
 - Each day's lunch and dinner must use different proteins
-- Snacks should be simple, grabbable, and different each day
+- Snacks should be simple, grabbable, and varied across the week
 
 STRICT FOOD RULES — follow without exception:${prefsCtx || ' None set.'}
 
@@ -1601,7 +1610,7 @@ ${wants ? 'This week Hannah wants: ' + wants : ''}${smartCtx}${pinnedStr}
 If a day is flagged as busy, add "busy":true. For pinned meals copy exactly and set "pinned":true.
 
 Return ONLY this JSON (no markdown, no backticks):
-{"Mon":[{"name":"","type":"lunch","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false},{"name":"","type":"dinner","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false},{"name":"","type":"snack","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false}],"Tue":[...],"Wed":[...],"Thu":[...],"Fri":[...],"Sat":[...],"Sun":[...]}`;
+{"Mon":[{"name":"","type":"breakfast","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false},{"name":"","type":"lunch","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false},{"name":"","type":"afternoon snack","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false},{"name":"","type":"dinner","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false},{"name":"","type":"evening snack","calories":0,"protein":0,"carbs":0,"fat":0,"time":"","busy":false,"pinned":false}],"Tue":[...],"Wed":[...],"Thu":[...],"Fri":[...],"Sat":[...],"Sun":[...]}`;
 
     const raw = await callClaude(prompt);
     btn.disabled = false;
@@ -1682,6 +1691,9 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
       <button class="action-sheet-btn" onclick="asSwap()">
         <span class="as-icon">↻</span> Swap for something else
       </button>
+      <button class="action-sheet-btn" onclick="asSkip();closeActionSheet()">
+        <span class="as-icon">○</span> Skip this meal
+      </button>
       <button class="action-sheet-btn danger" onclick="asRemove();closeActionSheet()">
         <span class="as-icon">×</span> Remove from plan
       </button>
@@ -1702,6 +1714,15 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
   function asPin() {
     if (_asDay === null) return;
     togglePin(_asDay, _asIdx);
+  }
+
+  function asSkip() {
+    if (_asDay === null) return;
+    const meal = weekPlan[_asDay][_asIdx];
+    if (!meal) return;
+    weekPlan[_asDay][_asIdx] = { ...meal, skipped: true };
+    saveState();
+    renderWeekGrid();
   }
 
   function asFavourite() {
@@ -1732,7 +1753,6 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
   function renderWeekGrid() {
     const grid = document.getElementById('week-grid');
     if (!grid) return;
-    // Update week stamp
     const stamp = document.getElementById('week-plan-stamp');
     if (stamp) {
       if (weekPlanMeta.weekStartDate) {
@@ -1740,13 +1760,12 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
         const label = formatWeekOf(weekPlanMeta.weekStartDate);
         stamp.textContent = sameWeek ? `(${label})` : `(plan from ${label} — consider regenerating)`;
         stamp.style.color = sameWeek ? 'var(--text-3)' : 'var(--amber)';
-      } else {
-        stamp.textContent = '';
-      }
+      } else { stamp.textContent = ''; }
     }
     grid.innerHTML = DAYS.map(d => {
       const meals = weekPlan[d] || [];
-      const totalCal = meals.reduce((s,m) => s + (m.calories||0), 0);
+      const activeMeals = meals.filter(m => !m.skipped);
+      const totalCal = activeMeals.reduce((s,m) => s + (m.calories||0), 0);
       const isBusy = meals.some(m => m.busy);
       return `<div class="day-col">
         <div class="day-label">${d}</div>
@@ -1754,14 +1773,17 @@ Return ONLY JSON (no backticks): {"name":"","type":"${existing.type}","calories"
         ${meals.length
           ? meals.map((m, i) => `
             <div class="day-meal-wrap">
-              <button class="pin-btn ${m.pinned ? 'pinned' : ''}" title="${m.pinned ? 'Unpin' : 'Pin this meal'}"
+              <button class="pin-btn ${m.pinned ? 'pinned' : ''}" title="${m.pinned ? 'Unpin' : 'Pin'}"
                 onclick="event.stopPropagation();togglePin('${d}',${i})">${m.pinned ? '📌' : '📍'}</button>
-              <div class="day-meal ${m.pinned ? 'pinned' : ''}" title="${m.type} · ${m.calories} kcal · ${m.time}"
-                onclick="openMealActionSheet('${d}',${i})">${m.name}</div>
-              <button class="swap-btn" id="swap-${d}-${i}"
-                onclick="event.stopPropagation();swapMeal('${d}',${i})">↻</button>
+              <div class="day-meal ${m.pinned ? 'pinned' : ''} ${m.skipped ? 'skipped' : ''}"
+                title="${m.type} · ${m.calories} kcal · ${m.time}"
+                onclick="openMealActionSheet('${d}',${i})">
+                ${m.skipped ? '<span style="opacity:0.45;">⊘ skipped</span>' : m.name}
+              </div>
+              ${!m.skipped ? `<button class="swap-btn" id="swap-${d}-${i}"
+                onclick="event.stopPropagation();swapMeal('${d}',${i})">↻</button>` : ''}
             </div>`).join('')
-          : '<div class="day-meal empty">empty</div>'}
+          : MEAL_TYPES.map(t => `<div class="day-meal empty">${t}</div>`).join('')}
         ${totalCal ? `<div class="day-cals">${totalCal} kcal</div>` : ''}
       </div>`;
     }).join('');
@@ -2023,114 +2045,61 @@ Return ONLY this JSON (no backticks):
     return `${dates[0].toLocaleDateString('en-GB', opts)} – ${dates[6].toLocaleDateString('en-GB', opts)}`;
   }
 
-  function initAheadTab() {
-    const dates = getNextWeekDays();
-    document.getElementById('ahead-date-range').textContent = formatNextWeekLabel(dates);
-    DAYS.forEach(d => { if (!aheadPlan[d]) aheadPlan[d] = []; });
-    const hasPlan = Object.values(aheadPlan).some(d => d.length > 0);
-    if (hasPlan) {
-      renderAheadGrid();
-      document.getElementById('ahead-grid-wrap').style.display = 'block';
+  // (Week ahead removed — replaced by Sunday Prep)
+
+  // ── Sunday prep ──
+  function initPrepTab() {
+    const hasPlan = Object.values(weekPlan).some(d => d.length > 0);
+    const noplan = document.getElementById('prep-no-plan');
+    const wrap = document.getElementById('prep-content-wrap');
+    if (!hasPlan) {
+      if (noplan) noplan.style.display = 'block';
+      if (wrap) wrap.style.display = 'none';
+      return;
     }
+    if (noplan) noplan.style.display = 'none';
+    if (wrap) wrap.style.display = 'block';
+    renderPrepPlanSummary();
   }
 
-  async function generateAheadWeek() {
-    const btn = document.getElementById('ahead-gen-btn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Planning next week…';
-    const target = getCalorieTarget();
-    const wants = document.getElementById('ahead-wants').value.trim();
-    const favsStr = favourites.length
-      ? `Hannah's favourite meals (try to include some): ${favourites.map(f => f.name).join(', ')}.`
-      : '';
-    const prefsCtx = buildPrefsPromptContext();
-    const dates = getNextWeekDays();
-    const dateLabel = formatNextWeekLabel(dates);
-
-    const prompt = `Create a 7-day weight loss meal plan for Hannah for the week of ${dateLabel}. She is based in the UK. No dietary restrictions unless specified below. 20-40 minute meals. ~${target} calories/day total. Meals should be filling and satisfying. Include breakfast, lunch, and dinner each day. Use varied, interesting recipes with UK ingredient names (grams, ml, °C).
-
-${favsStr}
-${wants ? 'Notes for this week: ' + wants : ''}${prefsCtx}
-
-Return ONLY this JSON (no markdown, no backticks):
-{"Mon":[{"name":"","type":"breakfast","calories":0,"protein":0,"carbs":0,"fat":0,"time":""},{"name":"","type":"lunch","calories":0,"protein":0,"carbs":0,"fat":0,"time":""},{"name":"","type":"dinner","calories":0,"protein":0,"carbs":0,"fat":0,"time":""}],"Tue":[...],"Wed":[...],"Thu":[...],"Fri":[...],"Sat":[...],"Sun":[...]}`;
-
-    const raw = await callClaude(prompt);
-    btn.disabled = false;
-    btn.innerHTML = 'Plan next week';
-    if (!raw || raw.startsWith('__')) {
-        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
-        else if (raw) alert("Something went wrong — please try again.");
-        return;
-      }
-    try {
-      aheadPlan = JSON.parse(raw.replace(/```json|```/g,'').trim());
-      DAYS.forEach(d => { if (!aheadPlan[d]) aheadPlan[d] = []; });
-      saveState();
-      renderAheadGrid();
-      document.getElementById('ahead-grid-wrap').style.display = 'block';
-      // Reset shopping and prep sections
-      document.getElementById('ahead-shop-content').style.display = 'none';
-      document.getElementById('ahead-prep-content').style.display = 'none';
-    } catch(e) { alert('Generation failed — try again.'); }
-  }
-
-  function renderAheadGrid() {
-    const grid = document.getElementById('ahead-week-grid');
-    if (!grid) return;
-    const dates = getNextWeekDays();
-    grid.innerHTML = DAYS.map((d, i) => {
-      const meals = aheadPlan[d] || [];
-      const totalCal = meals.reduce((s,m) => s + (m.calories||0), 0);
-      const dateNum = dates[i].getDate();
-      const mon = dates[i].toLocaleDateString('en-GB', { month: 'short' });
-      return `<div class="day-col">
-        <div class="day-label">${d}</div>
-        <div style="font-size:10px;color:var(--text-3);margin-bottom:5px;">${dateNum} ${mon}</div>
-        ${meals.length
-          ? meals.map(m => `<div class="day-meal" title="${m.type} · ${m.calories} kcal"
-              onclick="getRecipe('${encodeURIComponent(m.name)}','${m.calories}')">${m.name}</div>`).join('')
-          : '<div class="day-meal empty">empty</div>'}
-        ${totalCal ? `<div class="day-cals">${totalCal} kcal</div>` : ''}
-      </div>`;
+  function renderPrepPlanSummary() {
+    const el = document.getElementById('prep-plan-summary');
+    if (!el) return;
+    el.innerHTML = DAYS.map(d => {
+      const meals = (weekPlan[d] || []).filter(m => !m.skipped);
+      if (!meals.length) return `<div><strong>${d}:</strong> nothing planned</div>`;
+      return `<div><strong>${d}:</strong> ${meals.map(m => m.name).join(', ')}</div>`;
     }).join('');
   }
 
-  function clearAheadPlan() {
-    if (!confirm('Clear next week\'s plan?')) return;
-    DAYS.forEach(d => aheadPlan[d] = []);
-    saveState();
-    document.getElementById('ahead-grid-wrap').style.display = 'none';
-    document.getElementById('ahead-shop-content').style.display = 'none';
-    document.getElementById('ahead-prep-content').style.display = 'none';
-  }
-
-  async function generateAheadShopping() {
-    const btn = document.getElementById('ahead-shop-btn');
+  async function generatePrepShopping() {
+    const btn = document.getElementById('prep-shop-btn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Building list…';
-    const prompt = `Based on this 7-day meal plan, generate a shopping list grouped by supermarket category (Produce, Protein, Dairy & Eggs, Grains & Bread, Tins & Pantry, Condiments & Spices). Use UK quantities (grams, ml). Plan: ${JSON.stringify(aheadPlan)}. Return ONLY JSON (no backticks): {"categories":[{"name":"","items":[{"item":"","qty":""}]}]}`;
+    const activePlan = {};
+    DAYS.forEach(d => { activePlan[d] = (weekPlan[d] || []).filter(m => !m.skipped); });
+    const prompt = `Based on this 7-day meal plan, generate a full shopping list grouped by supermarket category (Produce, Protein, Dairy & Eggs, Grains & Bread, Tins & Pantry, Condiments & Spices). Use UK quantities (grams, ml). Account for any leftovers that appear across multiple days. Plan: ${JSON.stringify(activePlan)}. Return ONLY JSON (no backticks): {"categories":[{"name":"","items":[{"item":"","qty":""}]}]}`;
     const raw = await callClaude(prompt);
     btn.disabled = false;
-    btn.innerHTML = 'Build list';
+    btn.innerHTML = 'Build shopping list';
     if (!raw || raw.startsWith('__')) {
-        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
-        else if (raw) alert("Something went wrong — please try again.");
-        return;
-      }
+      if (raw === '__OVERLOADED__') alert("Servers busy — try again in a moment.");
+      else if (raw) alert("Something went wrong — try again.");
+      return;
+    }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
-      renderAheadShoppingList(parsed.categories);
-    } catch(e) { alert('Failed to build list — try again.'); }
+      renderPrepShoppingList(parsed.categories);
+    } catch(e) { alert('Failed — try again.'); }
   }
 
-  function renderAheadShoppingList(categories) {
-    const el = document.getElementById('ahead-shop-content');
+  function renderPrepShoppingList(categories) {
+    const el = document.getElementById('prep-shop-content');
     el.innerHTML = categories.map((cat, ci) => `
       <div class="shop-category">${cat.name}</div>
       ${cat.items.map((it, i) => `
-        <div class="shop-item" id="ash-${ci}-${i}">
-          <input type="checkbox" onchange="toggleAheadShopItem('ash-${ci}-${i}',this)" />
+        <div class="shop-item" id="psh-${ci}-${i}">
+          <input type="checkbox" onchange="document.getElementById('psh-${ci}-${i}').classList.toggle('checked',this.checked)" />
           <span>${it.item}</span>
           <span class="qty">${it.qty}</span>
         </div>
@@ -2139,27 +2108,25 @@ Return ONLY this JSON (no markdown, no backticks):
     el.style.display = 'block';
   }
 
-  function toggleAheadShopItem(id, cb) {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle('checked', cb.checked);
-  }
-
   async function generatePrepChecklist() {
-    const btn = document.getElementById('ahead-prep-btn');
+    const btn = document.getElementById('prep-checklist-btn');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> Building checklist…';
-    const dates = getNextWeekDays();
-    const prompt = `Hannah has planned the following meals for the week of ${formatNextWeekLabel(dates)}:
+    const activePlan = {};
+    DAYS.forEach(d => { activePlan[d] = (weekPlan[d] || []).filter(m => !m.skipped); });
+    const weekLabel = formatWeekOf(weekPlanMeta.weekStartDate || getCurrentWeekMonday());
+    const prompt = `Hannah has planned the following meals for ${weekLabel}:
 
-${JSON.stringify(aheadPlan)}
+${JSON.stringify(activePlan)}
 
-Create a practical Sunday prep checklist for her. Include:
-- Things to batch cook on Sunday (e.g. grains, proteins, roasted veg)
-- Things to defrost the night before on specific days
-- Any advance prep that saves time during the week (e.g. marinating, chopping)
-- Any tips for making the week easier
+Create a practical Sunday prep checklist to help her get ready for the week. Include:
+- Things to batch cook or prep on Sunday (grains, proteins, roasted veg, sauces)
+- Things to defrost the night before on specific days (mention the day by name)
+- Quick prep tasks for each day that will save time (chopping, marinating, portioning)
+- Any batch cooking opportunities where doubling a recipe helps later in the week
+- Tips to make the week easier based on her actual plan
 
-Keep it friendly, specific to her actual meal plan, and organised by task type. Use UK cooking terms and measurements.
+Keep it warm, specific to her meals, organised by section, and use UK cooking terms.
 
 Return ONLY JSON (no backticks):
 {"sections":[{"title":"string","tasks":["string"]}]}`;
@@ -2168,43 +2135,30 @@ Return ONLY JSON (no backticks):
     btn.disabled = false;
     btn.innerHTML = 'Generate checklist';
     if (!raw || raw.startsWith('__')) {
-        if (raw === '__OVERLOADED__') alert("Anthropic's servers are busy — wait a moment and try again.");
-        else if (raw) alert("Something went wrong — please try again.");
-        return;
-      }
+      if (raw === '__OVERLOADED__') alert("Servers busy — try again in a moment.");
+      else if (raw) alert("Something went wrong — try again.");
+      return;
+    }
     try {
       const parsed = JSON.parse(raw.replace(/```json|```/g,'').trim());
-      renderPrepChecklist(parsed.sections);
-    } catch(e) { alert('Failed to generate checklist — try again.'); }
+      renderPrepChecklistSections(parsed.sections);
+    } catch(e) { alert('Failed — try again.'); }
   }
 
-  function renderPrepChecklist(sections) {
-    const el = document.getElementById('ahead-prep-content');
-    el.innerHTML = sections.map(sec => `
+  function renderPrepChecklistSections(sections) {
+    const el = document.getElementById('prep-checklist-content');
+    el.innerHTML = sections.map((sec, si) => `
       <div style="margin-bottom:1rem;">
         <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:6px;">${sec.title}</div>
         ${sec.tasks.map((t, i) => `
-          <div class="shop-item" id="prep-${sec.title.replace(/\s/g,'')}-${i}">
-            <input type="checkbox" onchange="togglePrepItem('prep-${sec.title.replace(/\s/g,'')}-${i}',this)" />
+          <div class="shop-item" id="pck-${si}-${i}">
+            <input type="checkbox" onchange="document.getElementById('pck-${si}-${i}').classList.toggle('checked',this.checked)" />
             <span style="font-size:13px;">${t}</span>
           </div>
         `).join('')}
       </div>
     `).join('');
     el.style.display = 'block';
-  }
-
-  function togglePrepItem(id, cb) {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle('checked', cb.checked);
-  }
-
-  function copyAheadToCurrentWeek() {
-    if (!confirm('Copy next week\'s plan to this week? This will replace your current weekly plan.')) return;
-    DAYS.forEach(d => { weekPlan[d] = (aheadPlan[d] || []).map(m => ({ ...m, pinned: false })); });
-    saveState();
-    renderWeekGrid();
-    alert('Copied! Your weekly plan has been updated.');
   }
 
   // ── Snack bank ──
